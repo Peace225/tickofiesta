@@ -1,67 +1,75 @@
-import { Link } from "react-router-dom";
-import { ArrowRight, TrendingUp } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, TrendingUp, Sparkles } from "lucide-react";
 
 export default function CTASection({ ctaRef, ctaInView }) {
+  const navigate = useNavigate();
+
+  const handleRegister = () => {
+    navigate('/register', { replace: false });
+  };
+
   return (
-    // Réduction du padding vertical sur mobile (py-8 au lieu de py-12)
-    <section ref={ctaRef} className="px-4 py-8 md:py-16">
-      <div className={`max-w-4xl mx-auto transition-all duration-1000 ease-out ${ctaInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"}`}>
-        {/* CORRECTION : rounded-3xl au lieu de rounded- */}
-        <div className="relative overflow-hidden rounded-2xl md:rounded-3xl shadow-[0_15px_40px_rgba(0,0,0,0.25)]">
+    <section ref={ctaRef} className="px-4 py-12 md:py-24 relative overflow-hidden">
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-[#050508]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w- h- bg-[radial-gradient(circle,_rgba(108,71,255,0.25)_0%,_transparent_60%)] blur-3xl" />
+      </div>
 
-          <div className="absolute inset-0 bg-[#080812]" />
-          <div className="absolute inset-0 bg-gradient-to-br from-[#6c47ff]/90 via-[#5035cc]/70 to-[#080812]/95" />
+      <div className={`max-w-5xl mx-auto transition-all duration-1000 ${ctaInView? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+        <div className="relative group">
+          {/* bordure corrigée */}
+          <div className="absolute -inset- rounded- bg-gradient-to-r from-[#6c47ff] via-[#00d4aa] to-[#f5a623] opacity-60 blur-xl group-hover:opacity-80 transition-opacity duration-700" />
 
-          {/* CORRECTION : ajout des valeurs blur-2xl et blur-3xl */}
-          <div className="absolute -top-10 -right-10 w-32 md:w-64 h-32 md:h-64 bg-[#6c47ff] rounded-full blur-2xl md:blur-3xl opacity-40 animate-pulse" />
-          <div className="absolute -bottom-20 -left-10 w-32 md:w-48 h-32 md:h-48 bg-[#00d4aa] rounded-full blur-2xl md:blur-3xl opacity-20" />
-
-          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
-
-          {/* Réduction du padding intérieur sur mobile (py-8 px-4) */}
-          <div className="relative z-10 py-8 md:py-14 px-4 sm:px-12 text-center">
-
-            {/* Badge réduit */}
-            <div className="inline-flex items-center gap-1.5 bg-white/10 border border-white/20 backdrop-blur-md rounded-full px-2.5 py-1 md:px-3 md:py-1.5 mb-4 md:mb-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00d4aa] shadow-[0_0_10px_#00d4aa]" />
-              {/* CORRECTION : text-[9px] md:text-[10px] */}
-              <span className="text-white/90 text-[9px] md:text-[10px] font-black tracking-[0.2em] uppercase">Espace Organisateurs</span>
+          <div className="relative overflow-hidden rounded-[1.8rem] bg-[#0a0a12]/90 backdrop-blur-3xl border border-white/10 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)]">
+            <div className="absolute inset-0">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#6c47ff]/30 via-[#5035cc]/20 to-transparent" />
+              <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#6c47ff] rounded-full blur- opacity-30 animate-pulse" />
+              <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-[#00d4aa] rounded-full blur- opacity-20 animate-pulse" />
             </div>
 
-            {/* Titre réduit sur mobile (text-lg) */}
-            <h2 className="text-lg sm:text-xl md:text-3xl lg:text-4xl font-black text-white mb-2 md:mb-4 tracking-tighter leading-[1.2]">
-              VOUS ORGANISEZ<br />
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#f5a623] to-[#fbbf24] drop-shadow-[0_8px_8px_rgba(245,166,35,0.2)]">
-                DES ÉVÉNEMENTS?
-              </span>
-            </h2>
+            <div className="relative z-10 px-6 sm:px-12 lg:px-16 py-12 md:py-20 text-center">
+              <div className="inline-flex items-center gap-2 bg-white/[0.06] border border-white/15 backdrop-blur-xl rounded-full px-4 py-2 mb-8">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00d4aa] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00d4aa]"></span>
+                </span>
+                <Sparkles size={14} className="text-[#f5a623]" />
+                <span className="text-white/90 text- font-black tracking-[0.22em] uppercase">
+                  Espace Organisateurs Pro
+                </span>
+              </div>
 
-            {/* Paragraphe réduit sur mobile (text-[11px]) */}
-            <p className="text-white/60 mb-5 md:mb-8 text-[11px] sm:text-xs md:text-sm lg:text-base font-medium max-w-xl mx-auto leading-relaxed px-2 md:px-0">
-              Propulsez votre billetterie au niveau supérieur. Créez, gérez et vendez vos accès en quelques minutes avec notre interface intuitive et sécurisée.
-            </p>
+              <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-5 leading-[1.1]">
+                VOUS ORGANISEZ
+                <br />
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#f5a623] via-[#ffd36b] to-[#f5a623]">
+                  DES ÉVÉNEMENTS?
+                </span>
+              </h2>
 
-            {/* Boutons réduits en padding et texte sur mobile */}
-            <div className="flex flex-col sm:flex-row gap-2.5 md:gap-3 justify-center items-center w-full">
-              <Link
-                to="/register"
-                // CORRECTION : padding réduit px-4 py-2.5 sur mobile, et text-[10px]
-                className="w-full sm:w-auto group relative bg-white text-[#080812] font-black px-4 py-2.5 md:px-8 md:py-4 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_25px_rgba(255,255,255,0.3)] flex items-center justify-center gap-2 text-[10px] md:text-xs"
-              >
-                CRÉER UN COMPTE
-                {/* CORRECTION : w-4 h-4 */}
-                <ArrowRight size={14} className="w-3 h-3 md:w-4 md:h-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
+              <p className="text-white/70 mb-10 text-base md:text-lg max-w-2xl mx-auto">
+                Passez au niveau supérieur. Créez, gérez et vendez vos billets en 3 minutes.
+              </p>
 
-              <Link
-                to="/organisateurs"
-                // CORRECTION : padding réduit px-4 py-2.5 sur mobile, et text-[10px]
-                className="w-full sm:w-auto group border border-white/20 text-white font-bold px-4 py-2.5 md:px-8 md:py-4 rounded-xl hover:bg-white/5 hover:border-white/40 transition-all duration-300 flex items-center justify-center gap-2 text-[10px] md:text-xs backdrop-blur-sm"
-              >
-                {/* CORRECTION : w-4 h-4 */}
-                <TrendingUp size={14} className="w-3 h-3 md:w-4 md:h-4 text-[#00d4aa]" />
-                EN SAVOIR PLUS
-              </Link>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <button
+                  type="button"
+                  onClick={handleRegister}
+                  className="group/btn relative w-full sm:w-auto overflow-hidden bg-white text-black font-black px-8 py-4 rounded-2xl transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_0_40px_rgba(255,255,255,0.25)] flex items-center justify-center gap-2.5 text-sm cursor-pointer"
+                >
+                  <div className="absolute inset-0 -translate-x-full group-hover/btn:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-black/10 to-transparent skew-x-12" />
+                  <span className="relative z-10">CRÉER UN COMPTE GRATUIT</span>
+                  <ArrowRight size={18} className="relative z-10 group-hover/btn:translate-x-1 transition-transform" />
+                </button>
+
+                <Link
+                  to="/organisateurs"
+                  className="group w-full sm:w-auto bg-white/5 border border-white/15 text-white font-semibold px-8 py-4 rounded-2xl backdrop-blur-xl hover:bg-white/10 transition-all flex items-center justify-center gap-2.5 text-sm"
+                >
+                  <TrendingUp size={18} className="text-[#00d4aa] group-hover:rotate-12 transition-transform" />
+                  Voir la démo
+                </Link>
+              </div>
             </div>
           </div>
         </div>

@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { supabase } from '../../config/supabaseClient';
-import { X, Upload, Loader2, Calendar, MapPin, Tag, Banknote, Image as ImageIcon } from 'lucide-react';
+import { X, Upload, Loader2, Calendar, MapPin, Banknote } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function CreateEventModal({ show, onClose, onSuccess }) {
+// Petite fonction pour formater la date correctement pour l'input
+const formatLocalDatetime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const tzOffset = d.getTimezoneOffset() * 60000;
+  return new Date(d - tzOffset).toISOString().slice(0, 16);
+};
+
+export default function CreateEventModal({ show, onClose, onSuccess, eventToEdit = null }) {
   const { dark } = useSelector((s) => s.theme);
   const { user } = useSelector((s) => s.auth);
   
@@ -22,6 +30,28 @@ export default function CreateEventModal({ show, onClose, onSuccess }) {
     is_gratuit: false
   });
 
+  // PRÉ-REMPLIR LE FORMULAIRE SI ON CLIQUE SUR "MODIFIER"
+  useEffect(() => {
+    if (eventToEdit) {
+      setForm({
+        titre: eventToEdit.titre || '',
+        description: eventToEdit.description || '',
+        lieu: eventToEdit.lieu || '',
+        date: formatLocalDatetime(eventToEdit.date),
+        categorie: eventToEdit.categorie || 'Concert',
+        prix: eventToEdit.prix || 0,
+        is_gratuit: eventToEdit.prix === 0
+      });
+      setPreviewUrl(eventToEdit.image || null);
+    } else {
+      setForm({
+        titre: '', description: '', lieu: '', date: '', categorie: 'Concert', prix: 0, is_gratuit: false
+      });
+      setPreviewUrl(null);
+    }
+    setImageFile(null);
+  }, [eventToEdit, show]);
+
   if (!show) return null;
 
   const handleImageChange = (e) => {
@@ -37,9 +67,11 @@ export default function CreateEventModal({ show, onClose, onSuccess }) {
     setLoading(true);
 
     try {
-      let imageUrl = null;
+      // Si on modifie, on garde l'ancienne image par défaut. 
+      // Si on crée, c'est null par défaut.
+      let imageUrl = eventToEdit ? eventToEdit.image : null;
 
-      // 1. Upload de l'image si présente
+      // 1. Upload de la NOUVELLE image (si l'utilisateur en a choisi une)
       if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
@@ -55,21 +87,46 @@ export default function CreateEventModal({ show, onClose, onSuccess }) {
         imageUrl = data.publicUrl;
       }
 
-      // 2. Insertion dans la table events
-      const { error: insertError } = await supabase
-        .from('events')
-        .insert([{
-          ...form,
-          image: imageUrl,
-          organisateur_id: user.id,
-          statut: 'en_attente',
-          vote_actif: false
-        }]);
+      const finalPrix = form.is_gratuit ? 0 : Number(form.prix);
 
-      if (insertError) throw insertError;
+      // 2. Préparation des données STRICTES (pour éviter l'erreur 400 avec is_gratuit)
+      const payload = {
+        titre: form.titre,
+        description: form.description,
+        lieu: form.lieu,
+        date: form.date,
+        categorie: form.categorie,
+        prix: finalPrix,
+        image: imageUrl,
+      };
 
-      toast.success('Événement créé avec succès !');
-      onSuccess(); // Recharge la liste
+      // 3. LOGIQUE : MISE À JOUR OU CRÉATION ?
+      if (eventToEdit) {
+        // --- MODE ÉDITION ---
+        const { error: updateError } = await supabase
+          .from('events')
+          .update(payload)
+          .eq('id', eventToEdit.id);
+
+        if (updateError) throw updateError;
+        toast.success('Événement mis à jour avec succès !');
+
+      } else {
+        // --- MODE CRÉATION ---
+        const { error: insertError } = await supabase
+          .from('events')
+          .insert([{
+            ...payload,
+            organisateur_id: user.id,
+            statut: 'en_attente',
+            vote_actif: false
+          }]);
+
+        if (insertError) throw insertError;
+        toast.success('Événement créé avec succès !');
+      }
+
+      onSuccess(); // Rafraîchit la liste des événements
       onClose();   // Ferme le modal
     } catch (error) {
       toast.error(error.message);
@@ -91,8 +148,12 @@ export default function CreateEventModal({ show, onClose, onSuccess }) {
         {/* Header Modal */}
         <div className="sticky top-0 z-10 flex items-center justify-between p-6 border-b border-inherit backdrop-blur-md bg-inherit/80">
           <div>
-            <h2 className={`text-xl font-black ${dark ? 'text-white' : 'text-gray-900'}`}>Nouvel Événement</h2>
-            <p className="text-xs font-bold text-[#6c47ff] uppercase tracking-widest">Configuration initiale</p>
+            <h2 className={`text-xl font-black ${dark ? 'text-white' : 'text-gray-900'}`}>
+              {eventToEdit ? 'Modifier l\'événement' : 'Nouvel Événement'}
+            </h2>
+            <p className="text-xs font-bold text-[#6c47ff] uppercase tracking-widest">
+              {eventToEdit ? 'Mise à jour des informations' : 'Configuration initiale'}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-red-500/10 text-gray-500 hover:text-red-500 transition-colors">
             <X size={24} />
@@ -131,15 +192,22 @@ export default function CreateEventModal({ show, onClose, onSuccess }) {
               <input required type="text" value={form.titre} onChange={e => setForm({...form, titre: e.target.value})} className={inputClass} placeholder="Ex: Festival des Grillades" />
             </div>
 
-            {/* Catégorie */}
+            {/* Catégories enrichies */}
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest opacity-60">Catégorie</label>
               <select value={form.categorie} onChange={e => setForm({...form, categorie: e.target.value})} className={inputClass}>
-                <option>Concert</option>
-                <option>Festival</option>
-                <option>Conférence</option>
-                <option>Sport</option>
-                <option>Soirée</option>
+                <option value="Concert">Concert</option>
+                <option value="Festival">Festival</option>
+                <option value="Soirée">Soirée</option>
+                <option value="Culture">Culture</option>
+                <option value="Gastronomie">Gastronomie</option>
+                <option value="Sport">Sport</option>
+                <option value="Formation">Formation</option>
+                <option value="Business">Business</option>
+                <option value="Science">Science</option>
+                <option value="Religieux">Religieux</option>
+                <option value="Tourisme">Tourisme</option>
+                <option value="Autre">Autre</option>
               </select>
             </div>
           </div>
@@ -170,30 +238,42 @@ export default function CreateEventModal({ show, onClose, onSuccess }) {
             </div>
           </div>
 
-          {/* Pricing Section */}
+          {/* Pricing Section - Logique des billets */}
           <div className={`p-4 rounded-2xl border ${dark ? 'bg-white/5 border-white/5' : 'bg-gray-50 border-gray-100'}`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Banknote size={18} className="text-[#00d4aa]" />
-                <span className="text-xs font-black uppercase">Tarification</span>
+                <span className="text-xs font-black uppercase">Tarification Principale</span>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={form.is_gratuit} onChange={e => setForm({...form, is_gratuit: e.target.checked})} />
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={form.is_gratuit} 
+                  onChange={e => setForm({...form, is_gratuit: e.target.checked})} 
+                />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00d4aa]"></div>
                 <span className="ml-3 text-[10px] font-black uppercase text-gray-500">Gratuit</span>
               </label>
             </div>
 
-            {!form.is_gratuit && (
+            {!form.is_gratuit ? (
               <div className="animate-fade-in">
                 <input 
                   type="number" 
+                  min="0"
                   value={form.prix} 
                   onChange={e => setForm({...form, prix: e.target.value})} 
                   className={inputClass} 
                   placeholder="Prix d'entrée de base (FCFA)" 
                 />
-                <p className="text-[9px] mt-2 font-bold text-amber-500 uppercase tracking-tighter">* Vous pourrez configurer des tarifs détaillés (VIP, etc.) plus tard.</p>
+                <p className="text-[9px] mt-2 font-bold text-amber-500 uppercase tracking-tighter">
+                  * Ce prix sera affiché par défaut. Vous pourrez configurer des tarifs multiples (VIP, Pass...) plus tard dans le menu "Billetterie".
+                </p>
+              </div>
+            ) : (
+              <div className="animate-fade-in bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                 <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest text-center">L'accès à cet événement sera 100% gratuit.</p>
               </div>
             )}
           </div>
@@ -204,7 +284,7 @@ export default function CreateEventModal({ show, onClose, onSuccess }) {
             disabled={loading}
             className="w-full bg-gradient-to-r from-[#6c47ff] to-[#5a37e0] text-white py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-xl shadow-[#6c47ff]/20 hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? <Loader2 className="animate-spin" size={18} /> : 'Publier l\'événement'}
+            {loading ? <Loader2 className="animate-spin" size={18} /> : (eventToEdit ? 'Enregistrer les modifications' : 'Publier l\'événement')}
           </button>
 
         </form>

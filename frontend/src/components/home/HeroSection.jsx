@@ -35,118 +35,148 @@ export default function HeroSection({ heroRef, heroInView, stats }) {
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % slides.length);
-    }, 5000);
+    }, 6000); 
     return () => clearInterval(interval);
   }, [slides.length]);
 
   return (
     <section
       ref={heroRef}
-      className="relative w-full min-h-[320px] md:min-h-[280px] md:aspect-[1920/500] lg:max-h-[400px] flex items-center justify-center overflow-hidden"
+      // ⬇️ HAUTEUR RÉDUITE ICI : Format Bannière (300px mobile, 400px PC)
+      className="relative w-full h-[300px] md:h-[400px] flex items-center justify-center overflow-hidden bg-black"
     >
       {/* --- BACKGROUNDS CARROUSEL --- */}
       {slides.map((slide, i) => (
         <div
           key={i}
-          className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-            activeSlide === i ? "opacity-100" : "opacity-0"
+          className={`absolute inset-0 transition-opacity duration-[1500ms] ease-in-out ${
+            activeSlide === i ? "opacity-100 z-10" : "opacity-0 z-0"
           }`}
         >
           <img
             src={slide.bg}
             alt="Background"
-            className={`w-full h-full object-cover object-center transition-transform duration-1000 ease-out ${
+            className={`w-full h-full object-cover object-center transition-transform duration-[8000ms] ease-out ${
               activeSlide === i ? "scale-105" : "scale-100"
             }`}
           />
-          {/* OPACITÉ RÉDUITE ICI : Changement de black/80 à black/20 pour une visibilité maximale */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
-          {/* Suppression du voile de couleur pour laisser l'image naturelle */}
-          <div className="absolute inset-0 bg-black/10" /> 
+          
+          {/* Dégradés pour la lisibilité */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/20 to-black/80" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-transparent to-black/50" />
         </div>
       ))}
 
-      {/* Orbes - Toujours là pour le style mais ne cachent pas l'image */}
-      <div className="absolute top-[-10%] left-[-10%] w-24 md:w-80 h-24 md:h-80 bg-[#6c47ff]/20 rounded-full blur-3xl animate-pulse z-10 pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-24 md:w-80 h-24 md:h-80 bg-[#00d4aa]/15 rounded-full blur-3xl animate-bounce duration-1000 z-10 pointer-events-none" />
+      {/* Orbes décoratifs (Subtils) */}
+      <div className="absolute top-[-20%] left-[-10%] w-[30vw] h-[30vw] bg-[#6c47ff]/20 rounded-full blur-[80px] animate-pulse z-10 pointer-events-none mix-blend-screen" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[25vw] h-[25vw] bg-[#00d4aa]/15 rounded-full blur-[60px] z-10 pointer-events-none mix-blend-screen" />
 
-      {/* --- CONTENU DE LA BANNIÈRE --- */}
-      <div className={`relative z-20 w-full max-w-6xl mx-auto px-4 md:px-6 text-center py-6 md:py-0 transition-all duration-1000 ease-out ${
+      {/* --- CONTENU CENTRAL --- */}
+      <div className={`relative z-20 w-full h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col transition-all duration-[1200ms] ease-out ${
         heroInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
       }`}>
 
-        {/* Badge */}
-        <div className="inline-flex items-center gap-1.5 bg-black/30 border border-white/20 backdrop-blur-md px-2.5 py-1 md:px-3 md:py-1 rounded-full mb-3">
-          <Sparkles size={8} className="md:w-2.5 md:h-2.5 text-[#f5a623]" />
-          <span className="text-white text-[8px] md:text-[9px] font-black tracking-[0.2em] uppercase">
-            Plateforme Événementielle
-          </span>
-        </div>
+        {/* Espace central pour le texte et le bouton */}
+        <div className="flex-1 flex flex-col items-center justify-center mt-2">
+          
+          {/* Badge Premium */}
+          <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 backdrop-blur-md px-3 py-1 rounded-full mb-4 shadow-xl">
+            <Sparkles size={12} className="text-[#f5a623] animate-pulse" />
+            <span className="text-white text-[9px] font-black tracking-[0.2em] uppercase">
+              L'excellence de l'événementiel
+            </span>
+          </div>
 
-        {/* Texte */}
-        <div className="relative min-h-[100px] md:h-24 mb-3 md:mb-2">
-          {slides.map((slide, i) => (
-            <div
-              key={i}
-              className={`absolute inset-x-0 transition-all duration-700 flex flex-col items-center ${
-                activeSlide === i
-                ? "opacity-100 translate-y-0"
-                  : "opacity-0 translate-y-4 pointer-events-none"
-              }`}
-            >
-              <h1 className="flex flex-col md:flex-row justify-center items-center gap-0.5 md:gap-1.5 text-lg sm:text-xl md:text-2xl lg:text-3xl font-black leading-tight md:leading-none tracking-tighter mb-1.5 md:mb-1.5">
-                {/* Ajout d'un drop-shadow plus fort pour compenser la clarté de l'image */}
-                <span className="text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">{slide.title}</span>
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#f5a623] via-[#fbbf24] to-[#f5a623] drop-shadow-[0_2px_15px_rgba(0,0,0,0.5)] uppercase">
-                  {slide.highlight}
-                </span>
-              </h1>
-
-              <p className="text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.8)] text-[10px] md:text-[11px] font-bold max-w-sm md:max-w-lg mx-auto leading-relaxed px-4 md:px-2 mb-3">
-                {slide.subtitle}
-              </p>
-
-              <Link
-                to={slide.link}
-                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-[#6c47ff] to-[#8b6bff] text-white px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-[0.15em] shadow-2xl shadow-black/50 hover:scale-105 active:scale-95 transition-all duration-300 group"
+          {/* Titres et Sous-titres (Hauteur réduite pour s'adapter) */}
+          <div className="relative w-full h-[90px] sm:h-[110px] flex justify-center mb-4">
+            {slides.map((slide, i) => (
+              <div
+                key={i}
+                className={`absolute inset-x-0 transition-all duration-[1000ms] ease-in-out flex flex-col items-center justify-center ${
+                  activeSlide === i
+                  ? "opacity-100 translate-y-0 blur-none"
+                    : "opacity-0 translate-y-4 blur-sm pointer-events-none"
+                }`}
               >
-                {slide.cta}
-                <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </div>
-          ))}
+                {/* ⬇️ TAILLE DU TEXTE RÉDUITE POUR LE FORMAT BANNIÈRE */}
+                <h1 className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black leading-tight tracking-tighter mb-2">
+                  <span className="text-white drop-shadow-xl">
+                    {slide.title}
+                  </span>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#fbbf24] via-[#f5a623] to-[#d97706] drop-shadow-lg uppercase">
+                    {slide.highlight}
+                  </span>
+                </h1>
+
+                <p className="text-white/90 text-xs sm:text-sm font-medium max-w-lg mx-auto leading-relaxed drop-shadow-md">
+                  {slide.subtitle}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Bouton d'action principal */}
+          <div className="relative h-12 w-full flex justify-center mb-2">
+            {slides.map((slide, i) => (
+               <Link
+                 key={i}
+                 to={slide.link}
+                 className={`absolute transition-all duration-[800ms] ease-in-out inline-flex items-center gap-2 bg-white text-black px-6 py-2.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-[0.15em] shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105 active:scale-95 group ${
+                   activeSlide === i ? "opacity-100 scale-100 z-10" : "opacity-0 scale-90 z-0 pointer-events-none"
+                 }`}
+               >
+                 {slide.cta}
+                 <div className="w-5 h-5 bg-black rounded-full flex items-center justify-center group-hover:translate-x-1 transition-transform">
+                    <ArrowRight size={10} className="text-white" />
+                 </div>
+               </Link>
+            ))}
+          </div>
         </div>
 
-        {/* Stats et Dots */}
-        <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12 mt-5 md:mt-4">
-          <div className="flex items-center justify-center gap-6 md:gap-8">
+        {/* --- STATISTIQUES ET INDICATEURS (Bottom Bar) --- */}
+        <div className="w-full flex items-center justify-between border-t border-white/10 pt-3 sm:pt-4 mt-auto">
+          
+          {/* Stats */}
+          <div className="flex items-center gap-6 sm:gap-10 hidden sm:flex">
             {stats && stats.map((s, i) => (
-              <div key={i} className="relative text-center">
-                <p className={`text-base md:text-xl font-black mb-0 tracking-tight ${s.color} drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]`}>
+              <div key={i} className="text-left">
+                <p className={`text-lg sm:text-xl font-black mb-0 tracking-tighter ${s.color} drop-shadow-lg leading-none`}>
                   {s.val}
                 </p>
-                <p className="text-white text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] drop-shadow-md">
+                <p className="text-white/60 text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] mt-1">
                   {s.label}
                 </p>
               </div>
             ))}
           </div>
 
-          <div className="hidden md:block w-px h-5 bg-white/20" />
+          {/* Version Mobile des stats (Centrée si écran très petit) */}
+          <div className="flex items-center gap-4 sm:hidden">
+            {stats && stats.slice(0, 2).map((s, i) => (
+               <div key={i} className="flex items-center gap-1.5">
+                  <p className={`text-sm font-black ${s.color}`}>{s.val}</p>
+                  <p className="text-white/60 text-[7px] font-black uppercase tracking-widest">{s.label}</p>
+               </div>
+            ))}
+          </div>
 
-          <div className="flex items-center justify-center gap-1.5">
+          {/* Dots de Navigation */}
+          <div className="flex items-center gap-2">
             {slides.map((_, i) => (
               <button
                 key={i}
                 onClick={() => setActiveSlide(i)}
-                className={`transition-all duration-300 rounded-full ${
+                className={`transition-all duration-500 rounded-full h-1 sm:h-1.5 ${
                   activeSlide === i
-                  ? "w-5 h-1.5 md:w-4 md:h-1 bg-[#00d4aa] shadow-[0_0_15px_rgba(0,212,170,0.6)]"
-                    : "w-1.5 h-1.5 md:w-1 md:h-1 bg-white/40 hover:bg-white/70"
+                  ? "w-6 sm:w-8 bg-[#f5a623] shadow-[0_0_15px_rgba(245,166,35,0.8)]"
+                    : "w-1.5 sm:w-2 bg-white/30 hover:bg-white/60"
                 }`}
+                aria-label={`Aller au slide ${i + 1}`}
               />
             ))}
           </div>
+
         </div>
       </div>
     </section>

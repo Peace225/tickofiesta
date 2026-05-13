@@ -7,7 +7,7 @@ import CreateEventModal from './CreateEventModal';
 import Spinner from '../../components/ui/Spinner';
 import { 
   Plus, Calendar, ToggleLeft, ToggleRight, Layout, 
-  Sparkles, Ticket, MapPin, Clock, ImageIcon 
+  Sparkles, Ticket, MapPin, Clock, ImageIcon, Edit3 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -18,6 +18,7 @@ export default function OrgEventsPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null); // Nouvel état pour l'édition
 
   const loadEvents = useCallback(async () => {
     if (!user) return;
@@ -48,12 +49,21 @@ export default function OrgEventsPage() {
 
       if (error) throw error;
       
-      // Mise à jour locale (Optimiste)
       setEvents(events.map(ev => ev.id === id ? { ...ev, vote_actif: !current } : ev));
       toast.success(current ? 'Votes désactivés' : 'Votes activés');
     } catch { 
       toast.error('Erreur de mise à jour'); 
     }
+  };
+
+  const openEditModal = (event) => {
+    setEditingEvent(event);
+    setShowForm(true);
+  };
+
+  const closeFormModal = () => {
+    setShowForm(false);
+    setEditingEvent(null);
   };
 
   const statutConfig = {
@@ -99,7 +109,7 @@ export default function OrgEventsPage() {
             </div>
             
             <button
-              onClick={() => setShowForm(true)}
+              onClick={() => { setEditingEvent(null); setShowForm(true); }}
               className="group flex items-center justify-center gap-3 bg-gradient-to-r from-[#6c47ff] to-[#5a37e0] text-white px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-[#6c47ff]/20 hover:scale-[1.02] active:scale-95 transition-all"
             >
               <Plus size={18} className="group-hover:rotate-90 transition-transform" />
@@ -153,6 +163,15 @@ export default function OrgEventsPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 pt-6">
+                      
+                      {/* Action : Modifier */}
+                      <button
+                        onClick={() => openEditModal(event)}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 text-gray-500 hover:text-amber-500 hover:border-amber-500/50 text-[10px] font-black uppercase tracking-widest transition-all`}
+                      >
+                        <Edit3 size={16} /> Modifier
+                      </button>
+
                       {/* Action : Votes */}
                       <button
                         onClick={() => handleToggleVote(event.id, event.vote_actif)}
@@ -172,7 +191,7 @@ export default function OrgEventsPage() {
                         state={{ eventId: event.id, eventTitle: event.titre }}
                         className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 text-gray-500 hover:text-[#00d4aa] hover:border-[#00d4aa]/50 text-[10px] font-black uppercase tracking-widest transition-all`}
                       >
-                        <Ticket size={16} /> Gérer Billets
+                        <Ticket size={16} /> Billets
                       </Link>
                     </div>
                   </div>
@@ -187,7 +206,7 @@ export default function OrgEventsPage() {
               <h3 className={`text-2xl font-black mb-2 ${theme.text}`}>Votre catalogue est vide</h3>
               <p className={`text-sm ${theme.sub} mb-10 max-w-sm mx-auto`}>Commencez à créer des expériences mémorables pour vos clients dès maintenant.</p>
               <button
-                onClick={() => setShowForm(true)}
+                onClick={() => { setEditingEvent(null); setShowForm(true); }}
                 className="bg-[#6c47ff] text-white px-10 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-[#6c47ff]/20 hover:scale-105 transition-all"
               >
                 Créer mon premier événement
@@ -196,11 +215,12 @@ export default function OrgEventsPage() {
           )}
         </div>
 
-        {/* Modal de création */}
+        {/* Modal de création / édition */}
         <CreateEventModal
           show={showForm}
-          onClose={() => setShowForm(false)}
-          onSuccess={loadEvents}
+          eventToEdit={editingEvent}
+          onClose={closeFormModal}
+          onSuccess={() => { loadEvents(); closeFormModal(); }}
         />
       </main>
     </div>

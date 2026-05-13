@@ -9,13 +9,18 @@ import {
 import toast from 'react-hot-toast';
 import BackButton from '../../components/shared/BackButton';
 
+// Vos catégories fixes
+const CATEGORIES = [
+  "Concert", "Formation", "Soirée", "Tourisme", 
+  "Sport", "Festival", "Business", "Concours", "Autre"
+];
+
 export default function OrgEventCreatePage() {
   const navigate = useNavigate();
   const { user } = useSelector((s) => s.auth);
   const { dark } = useSelector((s) => s.theme);
 
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState([]);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
@@ -25,21 +30,13 @@ export default function OrgEventCreatePage() {
     date: '',
     heure: '',
     lieu: '',
-    categorie_id: '',
+    categorie: '', // Remplacé categorie_id par categorie
   });
 
+  // Mise à jour de la structure des tarifs pour correspondre à Supabase
   const [tarifs, setTarifs] = useState([
-    { type: 'Standard', prix: 0, quantite_disponible: 100 }
+    { nom: 'Standard', prix: 0, quantite: 100 }
   ]);
-
-  useEffect(() => {
-    const fetchCategories = async () => {
-      const { data, error } = await supabase.from('categories').select('*').eq('is_active', true);
-      if (error) console.error("Erreur catégories:", error);
-      else setCategories(data);
-    };
-    fetchCategories();
-  }, []);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -50,23 +47,23 @@ export default function OrgEventCreatePage() {
     }
   };
 
-  const addTarif = () => setTarifs([...tarifs, { type: '', prix: 0, quantite_disponible: 0 }]);
+  const addTarif = () => setTarifs([...tarifs, { nom: '', prix: 0, quantite: 0 }]);
   const removeTarif = (index) => setTarifs(tarifs.filter((_, i) => i !== index));
 
   const updateTarif = (index, field, value) => {
     const newTarifs = [...tarifs];
-    // Sécurité pour les nombres : évite le NaN si le champ est vide
-    const val = (field === 'prix' || field === 'quantite_disponible') ? (parseInt(value) || 0) : value;
+    const val = (field === 'prix' || field === 'quantite') ? (parseInt(value) || 0) : value;
     newTarifs[index][field] = val;
     setTarifs(newTarifs);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const userId = user?.id || user?.user?.id; // Sécurité sur l'ID
+    const userId = user?.id || user?.user?.id; 
     
     if (!userId) return toast.error("Session expirée, reconnectez-vous");
     if (!imageFile) return toast.error("L'affiche de l'événement est obligatoire");
+    if (!formData.categorie) return toast.error("Veuillez choisir une catégorie");
 
     setLoading(true);
     try {
@@ -81,7 +78,7 @@ export default function OrgEventCreatePage() {
 
       if (uploadError) throw uploadError;
 
-      // 2. Création de l'événement
+      // 2. Création de l'événement (avec la catégorie en texte)
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .insert([{
@@ -95,14 +92,22 @@ export default function OrgEventCreatePage() {
 
       if (eventError) throw eventError;
 
-      // 3. Création des tarifs
+      // 3. Création des tarifs (avec la bonne structure Supabase)
       const tarifsToInsert = tarifs.map(t => ({
-        ...t,
-        event_id: eventData.id
+        event_id: eventData.id,
+        organisateur_id: userId,
+        nom: t.nom,
+        prix: t.prix,
+        quantite_totale: t.quantite,
+        quantite_disponible: t.quantite // Au début, le stock disponible est égal au stock total
       }));
 
       const { error: tarifsError } = await supabase.from('tarifs').insert(tarifsToInsert);
-      if (tarifsError) throw tarifsError;
+      
+      if (tarifsError) {
+        console.error("Erreur tarifs:", tarifsError);
+        throw new Error("Événement créé, mais erreur lors de la création des tarifs.");
+      }
 
       toast.success("Événement envoyé pour validation !");
       navigate('/dashboard/events');
@@ -168,9 +173,9 @@ export default function OrgEventCreatePage() {
             <div>
                <label className="text-[10px] font-black uppercase tracking-widest mb-2 block opacity-50">Catégorie</label>
                <select required className={`w-full p-4 rounded-2xl border outline-none font-bold ${theme.input}`}
-                value={formData.categorie_id} onChange={e => setFormData({...formData, categorie_id: e.target.value})}>
+                value={formData.categorie} onChange={e => setFormData({...formData, categorie: e.target.value})}>
                  <option value="">Sélectionner</option>
-                 {categories.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                </select>
             </div>
 
@@ -213,15 +218,15 @@ export default function OrgEventCreatePage() {
             <div className="space-y-4">
               {tarifs.map((tarif, index) => (
                 <div key={index} className={`flex flex-col md:flex-row gap-4 p-5 rounded-3xl border animate-in fade-in slide-in-from-right-2 ${dark ? 'border-white/5 bg-white/5' : 'bg-slate-50 border-gray-100'}`}>
-                  <input required placeholder="Nom du Pass" className={`flex-1 p-3 rounded-xl border outline-none text-xs font-black ${theme.input}`}
-                    value={tarif.type} onChange={e => updateTarif(index, 'type', e.target.value)} />
+                  <input required placeholder="Nom du Pass (ex: VIP, Standard)" className={`flex-1 p-3 rounded-xl border outline-none text-xs font-black ${theme.input}`}
+                    value={tarif.nom} onChange={e => updateTarif(index, 'nom', e.target.value)} />
                   
                   <div className="flex gap-4">
-                    <input required type="number" placeholder="Prix (FCFA)" className={`w-full md:w-32 p-3 rounded-xl border outline-none text-xs font-black ${theme.input}`}
+                    <input required type="number" min="0" placeholder="Prix (FCFA)" className={`w-full md:w-32 p-3 rounded-xl border outline-none text-xs font-black ${theme.input}`}
                       value={tarif.prix} onChange={e => updateTarif(index, 'prix', e.target.value)} />
 
-                    <input required type="number" placeholder="Nb." className={`w-full md:w-24 p-3 rounded-xl border outline-none text-xs font-black ${theme.input}`}
-                      value={tarif.quantite_disponible} onChange={e => updateTarif(index, 'quantite_disponible', e.target.value)} />
+                    <input required type="number" min="1" placeholder="Quantité" className={`w-full md:w-28 p-3 rounded-xl border outline-none text-xs font-black ${theme.input}`}
+                      value={tarif.quantite} onChange={e => updateTarif(index, 'quantite', e.target.value)} />
                   </div>
 
                   {tarifs.length > 1 && (

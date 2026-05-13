@@ -11,12 +11,11 @@ import {
 } from 'lucide-react';
 
 const PACKS = [
-  { id: 'pack1', votes: 1, prix: 100 },
   { id: 'pack5', votes: 5, prix: 500 },
   { id: 'pack10', votes: 10, prix: 1000 },
-  { id: 'pack30', votes: 30, prix: 3000 },
-  { id: 'pack50', votes: 50, prix: 5000 },
-  { id: 'pack100', votes: 100, prix: 10000 }
+  { id: 'pack60', votes: 60, prix: 3000 },
+  { id: 'pack100', votes: 100, prix: 5000 },
+  { id: 'pack200', votes: 200, prix: 10000 }
 ];
 
 const getImageUrl = (path) => {
@@ -76,7 +75,7 @@ export default function VoteDetailPage() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState(1); 
   const [candidateToVote, setCandidateToVote] = useState(null);
-  const [selectedPaymentPack, setSelectedPaymentPack] = useState(PACKS[3]); 
+  const [selectedPaymentPack, setSelectedPaymentPack] = useState(PACKS[0]); 
   
   // Étape 1 : Formulaire
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -352,7 +351,7 @@ export default function VoteDetailPage() {
                           {voting === c.id ? <Spinner size="sm" className="border-black" /> : (
                             <>
                               <Zap size={14} className="fill-black" /> Voter 
-                              <span className="font-normal text-[11px] opacity-80">{solde > 0 ? '— 1 crédit' : '— à partir de 100 FCFA'}</span>
+                              <span className="font-normal text-[11px] opacity-80">{solde > 0 ? '— 1 crédit' : '— à partir de 500 FCFA'}</span>
                             </>
                           )}
                         </button>

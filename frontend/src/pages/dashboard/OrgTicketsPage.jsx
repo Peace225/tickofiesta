@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import DashboardSidebar from '../../components/layout/DashboardSidebar';
-import { ScanLine, Ticket, Plus, Sparkles, ArrowRight, X, Loader2, Info } from 'lucide-react';
+import { ScanLine, Ticket, Plus, Sparkles, ArrowRight, X, Loader2, Info, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function OrgTicketsPage() {
@@ -74,10 +74,18 @@ export default function OrgTicketsPage() {
       quantite_disponible: Number(formData.get('quantite')) // Initialise le stock
     };
 
-    const { error } = await supabase.from('tarifs').insert([payload]);
+    const { data, error } = await supabase.from('tarifs').insert([payload]);
 
     if (error) {
-      toast.error(error.code === '42501' ? 'Permission refusée' : error.message);
+      // 🛑 AFFICHAGE DE L'ERREUR DÉTAILLÉE DANS LA CONSOLE (POUR CORRIGER L'ERREUR 400)
+      console.error("🔥 DÉTAILS DE L'ERREUR SUPABASE :", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      
+      toast.error(error.code === '42501' ? 'Permission refusée (Vérifiez les règles RLS)' : error.message);
     } else {
       toast.success('Tarif ajouté !');
       setShowTarifModal(false);

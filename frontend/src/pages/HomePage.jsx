@@ -5,7 +5,6 @@ import { fetchEvents } from "../store/slices/eventsSlice";
 
 import HeroSection from "../components/home/HeroSection";
 import EventsSection from "../components/home/EventsSection";
-import VotesSection from "../components/home/VotesSection";
 import AdsManager from "../components/home/AdsManager";
 import SocialProof from '../components/home/SocialProof';
 import PartnersSection from "../components/home/PartnersSection";
@@ -119,14 +118,6 @@ export default function HomePage() {
       {/* PREUVE SOCIALE (Compteurs, témoignages, etc.) */}
       <SocialProof />
       
-      {/* SECTION VOTES / CONCOURS */}
-      <VotesSection
-        votes={votes}
-        dark={dark}
-        votesRef={votesRef}
-        votesInView={votesInView}
-      />
-
       {/* SECTION APPEL À L'ACTION */}
       <CTASection
         ctaRef={ctaRef}

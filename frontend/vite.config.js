@@ -11,24 +11,25 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, './src') },
   },
 
-  // ✅ Pré-bundle les grosses libs
+  // ✅ Vite 8 utilise Rolldown, plus esbuildOptions ici
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', '@supabase/supabase-js', '@reduxjs/toolkit'],
-    esbuildOptions: { target: 'es2020' }
+    // esbuildOptions supprimé (déprécié)
   },
 
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 1000,
-    sourcemap: false, // <— supprime 2Mo de maps en prod
+    sourcemap: false,
     cssCodeSplit: true,
-    reportCompressedSize: false, // build 40% plus rapide
-    minify: 'esbuild', // <— 10x plus rapide que terser
-    assetsInlineLimit: 4096, // inline les petits SVG
+    reportCompressedSize: false,
+    minify: 'esbuild', // nécessite esbuild installé
+    assetsInlineLimit: 4096,
 
+    // ces options esbuild marchent toujours avec minify
     esbuild: {
-      drop: ['console', 'debugger'], // même effet que terser
-      legalComments: 'none'
+      drop: ['console', 'debugger'],
+      legalComments: 'none',
     },
 
     rollupOptions: {

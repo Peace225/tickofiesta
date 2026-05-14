@@ -10,8 +10,9 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ProtectedRoute from './components/shared/ProtectedRoute';
 import Spinner from './components/ui/Spinner';
+import WhatsAppButton from './components/home/WhatsAppButton';
 
-// ✅ TOUT en lazy maintenant
+// ✅ Lazy loading
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
@@ -21,7 +22,6 @@ const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
 const VotesPage = lazy(() => import('./pages/VotesPage'));
 const VoteDetailPage = lazy(() => import('./pages/VoteDetailPage'));
-//... garde tous tes autres lazy comme avant
 const OrganisateursPage = lazy(() => import('./pages/OrganisateursPage'));
 const OrganisateurProfilePage = lazy(() => import('./pages/OrganisateurProfilePage'));
 const PolitiquePage = lazy(() => import('./pages/PolitiquePage'));
@@ -67,14 +67,13 @@ const ScrollToTop = memo(() => {
 function PageTracker() {
   const { pathname } = useLocation();
   useEffect(() => {
-    if (import.meta.env.DEV) return; // pas de tracking en dev
+    if (import.meta.env.DEV) return;
     if (pathname.startsWith('/admin') || pathname.startsWith('/dashboard')) return;
 
     const track = () => {
       const sessionId = sessionStorage.getItem('bv_session') ||
         'sess_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
       sessionStorage.setItem('bv_session', sessionId);
-      // fire-and-forget, pas d'await
       supabase.from('page_views').insert([{ page_path: pathname, session_id: sessionId }]).then(()=>{});
     };
 
@@ -88,7 +87,7 @@ function PageTracker() {
 }
 
 const LoadingFallback = () => (
-  <div className="min-h- flex items-center justify-center">
+  <div className="min-h-screen flex items-center justify-center">
     <Spinner size="lg" />
   </div>
 );
@@ -115,7 +114,6 @@ export default function App() {
 
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); }, [dark]);
 
-  // ✅ Précharge les pages critiques après le premier paint
   useEffect(() => {
     if (initialized) {
       const preload = () => {
@@ -154,7 +152,6 @@ export default function App() {
               <Route path="/register" element={!user? <RegisterPage /> : <Navigate to={homeRoute} replace />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
-              {/*... toutes tes autres routes inchangées... */}
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:id" element={<EventDetailPage />} />
               <Route path="/votes" element={<VotesPage />} />
@@ -199,6 +196,7 @@ export default function App() {
           </Suspense>
         </main>
         <Footer />
+        <WhatsAppButton />
       </div>
     </BrowserRouter>
   );

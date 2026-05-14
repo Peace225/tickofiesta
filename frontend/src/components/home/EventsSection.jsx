@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom"; // 👈 Ajout de useNavigate
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../config/supabaseClient";
 import {
   Calendar, MapPin, ChevronLeft, ChevronRight,
@@ -16,7 +16,7 @@ const ICON_MAP = {
 };
 
 export default function EventsSection({ eventsRef, eventsInView, dark, searchQuery }) {
-  const navigate = useNavigate(); // 👈 Initialisation de la navigation
+  const navigate = useNavigate(); 
   
   const [events, setEvents] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -24,7 +24,9 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
   const [activeCat, setActiveCat] = useState("Toutes");
   const [page, setPage] = useState(0);
   const catScrollRef = useRef(null);
-  const PAGE_SIZE = 8;
+  
+  // 👈 MODIFICATION ICI : 16 éléments pour faire exactement 4 lignes de 4 colonnes
+  const PAGE_SIZE = 16; 
 
   const getImageUrl = (path) => {
     if (!path) return '/placeholder.jpg'; 
@@ -33,7 +35,6 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
     return data.publicUrl;
   };
 
-  // 1. Récupération UNIQUEMENT des événements (plus léger !)
   const fetchData = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
@@ -74,7 +75,6 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
     }
   }, []);
 
-  // 2. Temps réel UNIQUEMENT sur les événements
   useEffect(() => {
     fetchData(true);
     
@@ -117,14 +117,13 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
     <section ref={eventsRef} className={`py-6 md:py-12 px-3 md:px-4 transition-all duration-1000 ${eventsInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}>
       <div className="max-w-7xl mx-auto">
 
-        {/* 🛠️ ONGLET : Redirection vers la page de votes au clic */}
         <div className="flex justify-center mb-6 md:mb-10">
           <div className={`inline-flex p-1 rounded-xl border ${dark ? 'bg-white/5 border-white/10' : 'bg-gray-100 border-gray-200'}`}>
             <button className={`px-5 md:px-8 py-2 md:py-3 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${theme.tabActive}`}>
               Événements
             </button>
             <button 
-              onClick={() => navigate('/votes')} // 👈 Bascule vers la page des votes
+              onClick={() => navigate('/votes')}
               className={`px-5 md:px-8 py-2 md:py-3 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 text-gray-500 hover:text-[#00d4aa]`}
             >
               Votes <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]"></span>
@@ -165,6 +164,7 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
              <p className="text-[10px] md:text-xs font-black uppercase tracking-widest">Aucun événement trouvé</p>
           </div>
         ) : (
+          /* 👈 MODIFICATION ICI : lg:grid-cols-4 pour avoir 4 colonnes sur PC */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {displayedData.map((item) => (
               <div key={item.id} className={`group rounded-2xl border overflow-hidden transition-all duration-500 hover:-translate-y-1 ${theme.card}`}>
@@ -186,21 +186,21 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
 
                 </div>
 
-                <div className="p-4">
+                <div className="p-4 md:p-5">
                   <div className="flex items-center gap-1.5 mb-2">
                     <div className="w-5 h-5 rounded-full bg-[#6c47ff]/10 flex items-center justify-center"><User size={10} className="text-[#6c47ff]" /></div>
                     <span className="text-[9px] font-black uppercase text-[#6c47ff] tracking-widest truncate">{item.organisateur?.nom}</span>
                   </div>
-                  <h3 className={`font-black text-xs md:text-sm uppercase leading-tight line-clamp-1 mb-3 ${theme.text}`}>{item.titre}</h3>
+                  <h3 className={`font-black text-sm uppercase leading-tight line-clamp-1 mb-3 ${theme.text}`}>{item.titre}</h3>
                   
-                  <div className="space-y-1.5 mb-4">
-                    <div className={`flex items-center gap-2 text-[10px] font-bold ${theme.sub}`}>
-                      <Calendar size={12} className="text-[#6c47ff]" />
+                  <div className="space-y-1.5 mb-5">
+                    <div className={`flex items-center gap-2 text-[10px] md:text-xs font-bold ${theme.sub}`}>
+                      <Calendar size={14} className="text-[#6c47ff]" />
                       {new Date(item.date || item.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                     </div>
                     {item.lieu && (
-                      <div className={`flex items-center gap-2 text-[10px] font-bold ${theme.sub}`}>
-                        <MapPin size={12} className="text-rose-500" />
+                      <div className={`flex items-center gap-2 text-[10px] md:text-xs font-bold ${theme.sub}`}>
+                        <MapPin size={14} className="text-rose-500" />
                         <span className="truncate">{item.lieu}</span>
                       </div>
                     )}
@@ -208,7 +208,7 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
 
                   <Link 
                     to={`/events/${item.id}`} 
-                    className="block w-full text-center py-2.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 shadow-lg bg-rose-600 text-white shadow-rose-600/20 hover:bg-rose-700"
+                    className="block w-full text-center py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 shadow-lg bg-rose-600 text-white shadow-rose-600/20 hover:bg-rose-700"
                   >
                     Réserver
                   </Link>
@@ -221,11 +221,11 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-4 mt-8">
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className={`w-10 h-10 rounded-full border flex items-center justify-center ${theme.card}`}>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all hover:bg-gray-100 dark:hover:bg-white/10 ${theme.card}`}>
               <ChevronLeft size={16} />
             </button>
             <span className={`text-[10px] font-black tracking-widest ${theme.text}`}>{page + 1} / {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1} className={`w-10 h-10 rounded-full border flex items-center justify-center ${theme.card}`}>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all hover:bg-gray-100 dark:hover:bg-white/10 ${theme.card}`}>
               <ChevronRight size={16} />
             </button>
           </div>

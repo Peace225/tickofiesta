@@ -60,7 +60,7 @@ export default function Footer() {
                 </a>
               ))}
             </div>
-            <p className="text-xs text-zinc-600 mt-4">contact@tickofiesta.com<br/>+225 07 00 00 00</p>
+            <p className="text-xs text-zinc-600 mt-4">contact@tickofiesta.com<br/>27 24 39 47 01</p>
           </div>
         </div>
 

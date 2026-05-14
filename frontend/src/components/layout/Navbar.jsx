@@ -106,12 +106,20 @@ export default function Navbar() {
           <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between gap-4">
             
             {/* LOGO */}
-            <Link to="/" className="flex items-center gap-3 flex-shrink-0 group">
-              <img src="/images/logo.png" alt="Logo" className={`transition-all duration-300 ${scrolled ? 'h-8' : 'h-12'}`} />
-              <span className="font-black text-xl md:text-2xl tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-[#6c47ff] to-[#00d4aa]">
-                TICKOFIESTA
-              </span>
-            </Link>
+            <Link to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
+              <div className={`relative transition-all duration-300 ${scrolled ? 'w-9 h-9' : 'w-12 h-12 md:w-14 md:h-14'}`}>
+    <img 
+      src="/images/logo.png" 
+      alt="TickoFiesta" 
+      className="w-full h-full object-contain"
+      // Si ton logo est petit, utilise une version 2x :
+      // srcSet="/images/logo.png 1x, /images/logo@2x.png 2x"
+    />
+              </div>
+                  <span className={`font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-[#6c47ff] to-[#00d4aa] transition-all ${scrolled ? 'text-xl' : 'text-2xl md:text-'}`}>
+                       TICKOFIESTA
+                    </span>
+                </Link>
 
             <div className="flex-1" />
 

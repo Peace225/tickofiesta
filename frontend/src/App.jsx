@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { useEffect, lazy, Suspense, memo } from 'react';
+import { useEffect, lazy, Suspense, memo, useMemo } from 'react';
 import { Toaster } from 'react-hot-toast';
 
 import { getMe, loginSuccess, forceLogout } from './store/slices/authSlice';
@@ -11,13 +11,17 @@ import Footer from './components/layout/Footer';
 import ProtectedRoute from './components/shared/ProtectedRoute';
 import Spinner from './components/ui/Spinner';
 
+// ✅ TOUT en lazy maintenant
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
 const VotesPage = lazy(() => import('./pages/VotesPage'));
 const VoteDetailPage = lazy(() => import('./pages/VoteDetailPage'));
+//... garde tous tes autres lazy comme avant
 const OrganisateursPage = lazy(() => import('./pages/OrganisateursPage'));
 const OrganisateurProfilePage = lazy(() => import('./pages/OrganisateurProfilePage'));
 const PolitiquePage = lazy(() => import('./pages/PolitiquePage'));
@@ -60,29 +64,24 @@ const ScrollToTop = memo(() => {
   return null;
 });
 
-// ✅ CORRECTION ICI - plus de.catch()
 function PageTracker() {
   const { pathname } = useLocation();
   useEffect(() => {
+    if (import.meta.env.DEV) return; // pas de tracking en dev
     if (pathname.startsWith('/admin') || pathname.startsWith('/dashboard')) return;
 
-    const track = async () => {
+    const track = () => {
       const sessionId = sessionStorage.getItem('bv_session') ||
         'sess_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
       sessionStorage.setItem('bv_session', sessionId);
-
-      try {
-        await supabase.from('page_views').insert([{
-          page_path: pathname,
-          session_id: sessionId
-        }]);
-      } catch {}
+      // fire-and-forget, pas d'await
+      supabase.from('page_views').insert([{ page_path: pathname, session_id: sessionId }]).then(()=>{});
     };
 
     if ('requestIdleCallback' in window) {
-      requestIdleCallback(track, { timeout: 2000 });
+      requestIdleCallback(track, { timeout: 1500 });
     } else {
-      setTimeout(track, 0);
+      setTimeout(track, 300);
     }
   }, [pathname]);
   return null;
@@ -102,9 +101,9 @@ export default function App() {
   useEffect(() => {
     dispatch(getMe());
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
+      if (session?.user) {
         dispatch(loginSuccess({
-          user: {...session.user, role: session.user.user_metadata?.role || 'client', nom: session.user.user_metadata?.nom || 'Utilisateur'},
+          user: {...session.user, role: session.user.user_metadata?.role || 'client' },
           session
         }));
       } else if (event === 'SIGNED_OUT') {
@@ -116,22 +115,34 @@ export default function App() {
 
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); }, [dark]);
 
-  if (!initialized) {
-    return <div className={`min-h-screen flex items-center justify-center ${dark? 'bg-[#080812]' : 'bg-[#fafafe]'}`}><Spinner size="xl" /></div>;
-  }
+  // ✅ Précharge les pages critiques après le premier paint
+  useEffect(() => {
+    if (initialized) {
+      const preload = () => {
+        import('./pages/HomePage');
+        import('./pages/EventsPage');
+        import('./pages/LoginPage');
+      };
+      if ('requestIdleCallback' in window) requestIdleCallback(preload);
+      else setTimeout(preload, 2000);
+    }
+  }, [initialized]);
 
-  // ✅ CORRECTION : redirection selon le rôle
-  const getHomeRoute = () => {
+  const homeRoute = useMemo(() => {
     if (!user) return '/home';
     const role = user.role || user.user_metadata?.role;
     return role === 'admin'? '/admin' : role === 'organisateur'? '/dashboard' : '/events';
-  };
+  }, [user]);
+
+  if (!initialized) {
+    return <div className={`min-h-screen flex items-center justify-center ${dark? 'bg-[#080812]' : 'bg-[#fafafe]'}`}><Spinner size="xl" /></div>;
+  }
 
   return (
     <BrowserRouter>
       <ScrollToTop />
       <PageTracker />
-      <Toaster position="top-right" />
+      <Toaster position="top-right" toastOptions={{ duration: 2500 }} />
       <div className={`min-h-screen flex flex-col ${dark? 'bg-[#080812] text-[#e8e6ff]' : 'bg-[#fafafe] text-gray-900'}`}>
         <Navbar />
         <main className="flex-1">
@@ -139,11 +150,11 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route path="/home" element={<HomePage />} />
-
-              {/* ✅ Si connecté, va à sa vraie page */}
-              <Route path="/login" element={!user? <LoginPage /> : <Navigate to={getHomeRoute()} replace />} />
-              <Route path="/register" element={!user? <RegisterPage /> : <Navigate to={getHomeRoute()} replace />} />
-
+              <Route path="/login" element={!user? <LoginPage /> : <Navigate to={homeRoute} replace />} />
+              <Route path="/register" element={!user? <RegisterPage /> : <Navigate to={homeRoute} replace />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              {/*... toutes tes autres routes inchangées... */}
               <Route path="/events" element={<EventsPage />} />
               <Route path="/events/:id" element={<EventDetailPage />} />
               <Route path="/votes" element={<VotesPage />} />

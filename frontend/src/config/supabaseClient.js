@@ -1,30 +1,31 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
 // 1. Lecture des variables Vite
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
 
-// 2. Validation unique et claire
+// 2. Validation
 if (!supabaseUrl ||!supabaseUrl.startsWith('https://')) {
   throw new Error(
-    `[Supabase] VITE_SUPABASE_URL invalide. Valeur reçue: "${supabaseUrl}". Vérifie ton.env à la racine.`
-  );
+    `[Supabase] VITE_SUPABASE_URL invalide ("${supabaseUrl}"). Vérifie ton.env en local ou les Environment Variables sur Vercel.`
+  )
 }
 
-if (!supabaseAnonKey || supabaseAnonKey.length < 30) {
+if (!supabaseAnonKey || supabaseAnonKey.length < 100) {
   throw new Error(
-    '[Supabase] VITE_SUPABASE_ANON_KEY manquante ou trop courte. Vérifie ton.env.'
-  );
+    '[Supabase] VITE_SUPABASE_ANON_KEY manquante ou incorrecte. Vérifie ton.env ou Vercel.'
+  )
 }
 
-// 3. Client avec les options recommandées
+// 3. Client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+    detectSessionInUrl: true
+  }
+})
 
-// 4. Bonus : exporte aussi ton API backend si tu en as besoin ailleurs
-export const API_URL = import.meta.env.VITE_API_URL?.trim() || 'http://localhost:5000/api';
+// 4. API backend
+export const API_URL = import.meta.env.VITE_API_URL?.trim() ||
+  (import.meta.env.DEV? 'http://localhost:5000/api' : '')

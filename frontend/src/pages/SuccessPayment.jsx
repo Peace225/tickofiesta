@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { supabase } from '../../config/supabaseClient';
+import { supabase } from '../config/supabaseClient';
 import { QRCodeSVG } from 'qrcode.react';
 import { CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';

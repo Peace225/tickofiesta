@@ -1,249 +1,186 @@
-import { useState, useMemo } from 'react';
-import { useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../config/supabaseClient';
-import { 
-  Save, ArrowLeft, Calendar, Vote, Trophy, 
-  BarChart2, Swords, ListOrdered, Sparkles, 
-  FileText, UserPlus, Loader2, Upload, ImageIcon 
-} from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Upload, Trophy, Lock, Plus, Calendar, Type, Tag } from "lucide-react";
+import { supabase } from "../../config/supabaseClient";
+
+const CATEGORIES = [
+  { value: "awards", label: "Awards / Célébrités", desc: "Pour élire une personnalité (Miss, Mister, Influenceur)." },
+  { value: "beaute", label: "Beauté / Mode", desc: "Concours de beauté, mannequinat, style." },
+  { value: "sport", label: "Sport / Compétition", desc: "Tournois, MVP, meilleur athlète." },
+  { value: "entreprise", label: "Business / Entreprise", desc: "Employé du mois, meilleure startup." },
+  { value: "culture", label: "Culture / Art", desc: "Musique, danse, peinture, théâtre." },
+  { value: "education", label: "Éducation", desc: "Meilleur élève, concours scolaire." },
+  { value: "cuisine", label: "Cuisine / Gastronomie", desc: "Meilleur chef, recette populaire." },
+  { value: "autre", label: "Autre", desc: "Catégorie personnalisée." },
+];
 
 export default function OrgVoteCreatePage() {
-  const { dark } = useSelector((s) => s.theme);
-  const { user } = useSelector((s) => s.auth);
   const navigate = useNavigate();
-  
-  const [loading, setLoading] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
 
-  const [form, setForm] = useState({
-    titre: '',
-    description: '',
-    date_fin: '',
-    type: 'concours', // Ce sera enregistré dans la colonne "categorie"
-  });
+  const [isSecuring, setIsSecuring] = useState(true);
+  const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState("");
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("awards");
+  const [description, setDescription] = useState("");
+  const [endAt, setEndAt] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const VOTE_MECHANICS = [
-    { 
-      id: 'concours', 
-      label: 'Concours de Beauté / Awards', 
-      desc: 'Pour élire une personne (Miss, Mister, Awards, Élections).',
-      icon: <Trophy size={18} className="text-yellow-500" />
-    },
-    { 
-      id: 'sondage', 
-      label: 'Sondage d\'opinion', 
-      desc: 'Pour recueillir des avis ou réaliser une étude de marché.',
-      icon: <BarChart2 size={18} className="text-blue-500" />
-    },
-    { 
-      id: 'battle', 
-      label: 'Battle / Compétition', 
-      desc: 'Format 1v1 ou rounds (Battle de rap, danse, talent).',
-      icon: <Swords size={18} className="text-red-500" />
-    },
-    { 
-      id: 'classement', 
-      label: 'Classement / Top', 
-      desc: 'Pour faire un top avec élimination ou classement par rang.',
-      icon: <ListOrdered size={18} className="text-purple-500" />
-    },
-    { 
-      id: 'prediction', 
-      label: 'Prédiction / Pari', 
-      desc: 'Voter sur un résultat futur (Sport, Événements).',
-      icon: <Sparkles size={18} className="text-emerald-500" />
-    }
-  ];
+  // CORRIGÉ: séparé en 2 useEffect
+  useEffect(() => {
+    const t = setTimeout(() => setIsSecuring(false), 400);
+    return () => clearTimeout(t);
+  }, []);
 
-  // 📸 Gestion de l'aperçu de l'image
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        return toast.error("L'image est trop lourde (max 5Mo)");
-      }
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file)); 
-    }
+  useEffect(() => {
+    return () => { if (preview) URL.revokeObjectURL(preview); };
+  }, [preview]);
+
+  const handleImage = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return alert("Image max 5Mo");
+    if (preview) URL.revokeObjectURL(preview);
+    setImage(file);
+    setPreview(URL.createObjectURL(file));
   };
 
-  const handleSubmit = async (e, redirectPath = 'list') => {
-    e.preventDefault();
-    if (!user) return toast.error("Vous devez être connecté");
-    if (!form.titre || !form.date_fin) return toast.error("Titre et Date obligatoires");
-    if (!imageFile) return toast.error("Veuillez ajouter une affiche pour le concours");
-    
-    setLoading(true);
+  const saveVote = async () => {
+    if (!title.trim()) throw new Error("Nom du concours requis");
+    if (!endAt) throw new Error("Date de clôture requise");
+
+    setSubmitting(true);
     try {
-      // 1. Upload de l'image
-      const fileExt = imageFile.name.split('.').pop();
-      const fileName = `cover-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `covers/${user.id}/${fileName}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) throw new Error("Vous devez être connecté");
 
-      const { error: uploadError } = await supabase.storage
-        .from('vote-images') // ✅ Bucket corrigé
-        .upload(filePath, imageFile);
+      let imageUrl = null;
+      if (image) {
+        const ext = image.name.split('.').pop() || 'jpg';
+        const fileName = `${user.id}/${Date.now()}_${crypto.randomUUID()}.${ext}`;
 
-      if (uploadError) throw uploadError;
+        const { error: upErr } = await supabase.storage
+        .from("concours")
+        .upload(fileName, image, { upsert: false, contentType: image.type });
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('vote-images')
-        .getPublicUrl(filePath);
+        if (upErr) throw new Error("Upload image échoué: " + upErr.message);
 
-      // 2. Enregistrement dans la base de données
-      const payload = {
-        organisateur_id: user.id,
-        titre: form.titre.trim(),
-        description: form.description.trim(),
-        date_fin: new Date(form.date_fin).toISOString(),
-        categorie: form.type, // ✅ Mappé sur la bonne colonne SQL
-        image_url: publicUrl,
-        statut: 'en_attente' // En attente de validation admin
-      };
-
-      const { data, error } = await supabase
-        .from('votes')
-        .insert([payload])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast.success("Événement créé avec succès !");
-      
-      // Redirection intelligente
-      if (redirectPath === 'candidats') {
-        navigate(`/dashboard/votes/${data.id}/candidats/create`);
-      } else {
-        navigate('/dashboard/votes');
+        const { data } = supabase.storage.from("concours").getPublicUrl(fileName);
+        imageUrl = data.publicUrl;
       }
 
-    } catch (error) {
-      console.error("Erreur insertion:", error);
-      toast.error(`Erreur : ${error.message}`);
+      const { data: vote, error } = await supabase
+     .from("votes")
+     .insert({
+          title: title.trim(),
+          description: description.trim() || null,
+          category,
+          end_at: endAt,
+          image_url: imageUrl,
+          organizer_id: user.id,
+          status: "draft"
+        })
+     .select()
+     .single();
+
+      if (error) throw new Error(error.message);
+      return vote;
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const theme = useMemo(() => ({
-    bg: dark ? 'bg-[#080812]' : 'bg-[#f4f5f7]',
-    card: dark ? 'bg-[#12121f] border-white/5 shadow-2xl' : 'bg-white border-gray-100 shadow-xl',
-    input: dark ? 'bg-white/5 border-white/10 text-white focus:border-[#6c47ff]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#6c47ff]',
-    text: dark ? 'text-white' : 'text-gray-900',
-    sub: dark ? 'text-white/50' : 'text-gray-500'
-  }), [dark]);
+  const handleSave = async (e) => {
+    e.preventDefault();
+    try {
+      await saveVote();
+      navigate("/dashboard/votes", { replace: true });
+    } catch(err){
+      console.error(err);
+      alert(err.message);
+    }
+  };
+
+  const handleAddParticipants = async (e) => {
+    e.preventDefault();
+    try {
+      const v = await saveVote();
+      if (!v?.id) throw new Error("ID vote manquant");
+      navigate(`/dashboard/votes/${v.id}/candidats/create`);
+    } catch(err){
+      console.error(err);
+      alert(err.message);
+    }
+  };
+
+  const selectedCat = CATEGORIES.find(c => c.value === category);
+
+  if (isSecuring) return <div className="min-h-screen grid place-items-center bg-slate-50"><p className="text-violet-600 animate-pulse font-bold">Initialisation...</p></div>;
 
   return (
-    <div className={`min-h-screen pt-8 pb-20 transition-colors duration-300 ${theme.bg}`}>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        
-        <button onClick={() => navigate(-1)} className={`mb-8 flex items-center gap-2 font-bold uppercase tracking-widest text-[10px] transition-all hover:translate-x-[-4px] ${theme.sub}`}>
-          <ArrowLeft size={14} /> Retour
-        </button>
-
-        <div className="text-center mb-12">
-          <div className="w-20 h-20 bg-gradient-to-tr from-[#6c47ff] to-[#00d4aa] rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-[#6c47ff]/20">
-            <Vote size={40} className="text-white" />
+    <div className="min-h-screen bg-slate-50 py-10 px-4 flex justify-center">
+      <div className="w-full max-w-xl">
+        <div className="mb-8 text-center">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-violet-200">
+            <Trophy className="text-white" size={32} />
           </div>
-          <h1 className={`text-3xl md:text-4xl font-black tracking-tight ${theme.text}`}>Nouveau Concours</h1>
+          <h1 className="text-3xl font-extrabold text-slate-900 mt-4">Nouveau Challenge</h1>
         </div>
 
-        <form className={`rounded-[2.5rem] border p-8 md:p-12 ${theme.card}`}>
-          <div className="space-y-8">
-            
-            {/* 📸 IMAGE UPLOAD AVEC APERÇU */}
-            <div>
-              <label className={`block text-[10px] font-black uppercase tracking-widest mb-3 ${theme.sub}`}>
-                Affiche / Couverture *
-              </label>
-              <div className={`relative flex items-center justify-center w-full h-56 md:h-72 rounded-[2rem] border-2 border-dashed transition-all overflow-hidden ${dark ? 'border-white/10 bg-black/20 hover:border-[#6c47ff]/50' : 'border-gray-300 bg-gray-50 hover:border-[#6c47ff]/50'}`}>
-                {imagePreview ? (
-                  <div className="relative w-full h-full group">
-                    <img src={imagePreview} alt="Aperçu" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                      <span className="text-white text-[10px] font-black uppercase tracking-widest bg-white/20 backdrop-blur-md px-6 py-3 rounded-xl border border-white/20">
-                        Changer l'affiche
-                      </span>
-                    </div>
-                    <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 text-center p-6">
-                    <div className="w-14 h-14 rounded-2xl bg-[#6c47ff]/10 flex items-center justify-center text-[#6c47ff] mb-2">
-                      <Upload size={24} />
-                    </div>
-                    <span className={`text-[12px] font-black uppercase tracking-widest ${theme.text}`}>Ajouter une image</span>
-                    <span className={`text-[10px] font-medium ${theme.sub}`}>Format recommandé : 16:9 (Max 5Mo)</span>
-                    <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* TITRE */}
-            <div>
-              <label className={`block text-[10px] font-black uppercase tracking-widest mb-3 ${theme.sub}`}>Nom du concours *</label>
-              <input type="text" required value={form.titre} onChange={e => setForm({...form, titre: e.target.value})} className={`w-full px-6 py-4 rounded-2xl border outline-none font-bold text-lg transition-all ${theme.input}`} placeholder="Ex: Miss Côte d'Ivoire 2026" />
-            </div>
-
-            {/* TYPE DE VOTE */}
-            <div>
-              <label className={`block text-[10px] font-black uppercase tracking-widest mb-3 ${theme.sub}`}>Type de vote *</label>
-              <div className="grid grid-cols-1 gap-4">
-                <select value={form.type} onChange={e => setForm({...form, type: e.target.value})} className={`w-full px-6 py-4 rounded-2xl border outline-none font-bold appearance-none cursor-pointer ${theme.input}`}>
-                  {VOTE_MECHANICS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-                <div className={`p-5 rounded-2xl border flex items-start gap-4 ${dark ? 'bg-white/5 border-white/5' : 'bg-gray-50 border-gray-100'}`}>
-                  <div className="mt-1">{VOTE_MECHANICS.find(m => m.id === form.type)?.icon}</div>
-                  <div>
-                    <p className={`text-xs font-black uppercase tracking-wider mb-1 ${theme.text}`}>{VOTE_MECHANICS.find(m => m.id === form.type)?.label}</p>
-                    <p className={`text-xs leading-relaxed font-medium ${theme.sub}`}>{VOTE_MECHANICS.find(m => m.id === form.type)?.desc}</p>
-                  </div>
+        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-xl shadow-slate-200/50 border border-slate-100 space-y-6">
+          <div className="group cursor-pointer" onClick={() =>!submitting && fileInputRef.current?.click()}>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Affiche du concours</label>
+            <div className="relative h-48 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden bg-slate-50 hover:border-violet-400 transition">
+              {preview? <img src={preview} alt="" className="h-full w-full object-cover" /> : (
+                <div className="text-center p-4">
+                  <Upload className="mx-auto text-violet-500 mb-2" size={24}/>
+                  <p className="font-bold text-sm text-slate-600">Ajouter une affiche</p>
+                  <p className="text-xs text-slate-400">PNG, JPG - 5Mo max</p>
                 </div>
-              </div>
+              )}
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImage} disabled={submitting} />
             </div>
-
-            {/* DESCRIPTION */}
-            <div>
-              <label className={`block text-[10px] font-black uppercase tracking-widest mb-3 ${theme.sub}`}>Description</label>
-              <textarea rows="3" value={form.description} onChange={e => setForm({...form, description: e.target.value})} className={`w-full px-6 py-4 rounded-2xl border outline-none font-medium resize-none ${theme.input}`} placeholder="Règles, prix à gagner..." />
-            </div>
-
-            {/* DATE */}
-            <div>
-              <label className={`block text-[10px] font-black uppercase tracking-widest mb-3 ${theme.sub}`}>Date de clôture *</label>
-              <input type="datetime-local" required value={form.date_fin} onChange={e => setForm({...form, date_fin: e.target.value})} className={`w-full px-6 py-4 rounded-2xl border outline-none font-bold ${theme.input} [color-scheme:dark]`} />
-            </div>
-
-            {/* BOUTONS D'ACTION */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-              <button 
-                type="button"
-                disabled={loading}
-                onClick={(e) => handleSubmit(e, 'list')}
-                className={`py-5 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 transition-all flex items-center justify-center gap-2 ${dark ? 'border-white/10 text-white hover:bg-white/5' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-              >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                Enregistrer le vote
-              </button>
-
-              <button 
-                type="button"
-                disabled={loading}
-                onClick={(e) => handleSubmit(e, 'candidats')}
-                className="py-5 rounded-2xl bg-gradient-to-r from-[#6c47ff] to-[#00d4aa] text-white font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
-                Ajouter des participants
-              </button>
-            </div>
-
           </div>
-        </form>
+
+          <div className="space-y-4">
+            <div className="relative">
+              <Type className="absolute left-3.5 top-3.5 text-slate-400" size={18}/>
+              <input value={title} onChange={e=>setTitle(e.target.value)} disabled={submitting} placeholder="Nom du concours (Ex: Miss CI 2026)" className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 focus:bg-white border border-slate-200 focus:border-violet-500 outline-none disabled:opacity-60" />
+            </div>
+
+            <div className="relative">
+              <Tag className="absolute left-3.5 top-3.5 text-slate-400" size={18}/>
+              <select value={category} onChange={e => setCategory(e.target.value)} disabled={submitting} className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 focus:bg-white border border-slate-200 focus:border-violet-500 outline-none appearance-none disabled:opacity-60">
+                {CATEGORIES.map(cat => (<option key={cat.value} value={cat.value}>{cat.label}</option>))}
+              </select>
+            </div>
+
+            {selectedCat && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-violet-50 border border-violet-100">
+                <Trophy size={14} className="text-violet-600 mt-0.5 shrink-0"/>
+                <p className="text-xs text-violet-800"><span className="font-bold">{selectedCat.label} :</span> {selectedCat.desc}</p>
+              </div>
+            )}
+
+            <div className="relative">
+              <Calendar className="absolute left-3.5 top-3.5 text-slate-400" size={18}/>
+              <input type="datetime-local" value={endAt} onChange={e=>setEndAt(e.target.value)} disabled={submitting} className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 focus:bg-white border-slate-200 focus:border-violet-500 outline-none disabled:opacity-60" />
+            </div>
+
+            <textarea value={description} onChange={e=>setDescription(e.target.value)} disabled={submitting} placeholder="Description, règles, prix à gagner..." rows={3} className="w-full p-3 rounded-xl bg-slate-50 focus:bg-white border border-slate-200 focus:border-violet-500 outline-none resize-none disabled:opacity-60" />
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <button type="button" onClick={handleSave} disabled={submitting} className="flex-1 py-3.5 rounded-xl border-2 border-slate-200 font-bold text-slate-600 hover:bg-slate-50 flex items-center justify-center gap-2 disabled:opacity-50">
+              <Lock size={16}/> {submitting? "Enregistrement..." : "Enregistrer"}
+            </button>
+            <button type="button" onClick={handleAddParticipants} disabled={submitting} className="flex-1 py-3.5 rounded-xl bg-violet-600 text-white font-bold hover:bg-violet-700 flex items-center justify-center gap-2 shadow-lg shadow-violet-200 disabled:opacity-50">
+              <Plus size={16}/> {submitting? "Création..." : "Ajouter Candidats"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

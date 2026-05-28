@@ -1,207 +1,97 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { Check, Zap, Crown, Building2 } from 'lucide-react';
+import { Check, Zap, Crown, Building2, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../config/supabaseClient'; // Ajuste le chemin si nécessaire
+import { supabase } from '../config/supabaseClient';
 
-// Dictionnaire pour mapper les noms d'icônes en texte (depuis Supabase) vers les composants React
-const ICON_MAP = {
-  Zap: Zap,
-  Crown: Crown,
-  Building2: Building2
-};
-
-// Tarifs par défaut (Fallback si Supabase échoue ou charge)
-const DEFAULT_PLANS = [
-  {
-    name: 'Gratuit',
-    price: '0',
-    icon_name: 'Zap',
-    description: 'Pour tester la plateforme',
-    features: [
-      'Publier 1 événement/mois',
-      "Jusqu'à 50 participants",
-      'Page événement basique',
-      'Support par email',
-      'Commission 8% sur les ventes'
-    ],
-    cta: 'Commencer',
-    popular: false
-  },
-  {
-    name: 'Pro',
-    price: '19 000',
-    icon_name: 'Crown',
-    description: 'Pour les organisateurs réguliers',
-    features: [
-      'Événements illimités',
-      'Participants illimités',
-      'Personnalisation avancée',
-      'Analytics détaillées',
-      'Support prioritaire 24/7',
-      'Commission 5% sur les ventes',
-      'QR codes personnalisés'
-    ],
-    cta: 'Essayer Pro',
-    popular: true
-  },
-  {
-    name: 'Entreprise',
-    price: 'Sur devis',
-    icon_name: 'Building2',
-    description: 'Solutions sur mesure',
-    features: [
-      'Tout du plan Pro',
-      'Marque blanche',
-      'API dédiée',
-      'Account manager dédié',
-      'Commission négociable',
-      'Intégrations personnalisées',
-      'SLA garanti'
-    ],
-    cta: 'Contacter',
-    popular: false
-  }
-];
+const ICON_MAP = { Zap, Crown, Building2 };
 
 export default function Tarifs() {
   const { dark } = useSelector((s) => s.theme);
-  
-  // État pour stocker les plans (initialisé avec les plans par défaut)
-  const [plans, setPlans] = useState(DEFAULT_PLANS);
+  const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // --- LOGIQUE SUPABASE : RÉCUPÉRATION DES TARIFS ---
   useEffect(() => {
     const fetchTarifs = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('tarifs')
-          .select('*')
-          .eq('is_active', true)
-          .order('id', { ascending: true }); // Optionnel : trier par ID ou par Prix
-
-        if (error) {
-          console.warn('Erreur Supabase tarifs:', error.message);
-          return;
-        }
-
-        // Si on a des données, on remplace le tableau par défaut
-        if (data && data.length > 0) {
-          setPlans(data);
-        }
-      } catch (err) {
-        console.info("Tarifs non chargés depuis Supabase. Utilisation des valeurs par défaut.");
-      } finally {
-        setLoading(false);
-      }
+      const { data } = await supabase.from('tarifs').select('*').eq('is_active', true).order('id');
+      if (data) setPlans(data);
+      setLoading(false);
     };
-
     fetchTarifs();
   }, []);
 
   return (
-    <div className={`min-h-screen pt-32 pb-20 ${dark ? 'bg-[#0a0a16]' : 'bg-gray-50'}`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    <div className={`min-h-screen pt-24 pb-20 px-6 ${dark ? 'bg-[#050507]' : 'bg-slate-50'}`}>
+      <div className="max-w-7xl mx-auto">
         
-        {/* EN-TÊTE */}
-        <div className="text-center mb-16">
-          <h1 className={`text-5xl font-black mb-4 ${dark ? 'text-white' : 'text-gray-900'}`}>
-            Tarifs <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#6c47ff] to-[#00d4aa]">simples</span>
+        {/* EN-TÊTE ÉLÉGANT */}
+        <div className="text-center mb-20 space-y-4">
+          <div className="inline-flex items-center gap-2 bg-[#6c47ff]/10 text-[#6c47ff] px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border border-[#6c47ff]/20">
+            <Sparkles size={12} /> Plans Premium
+          </div>
+          <h1 className={`text-5xl md:text-6xl font-black tracking-tighter ${dark ? 'text-white' : 'text-slate-900'}`}>
+            Tarification transparente
           </h1>
-          <p className={`text-lg ${dark ? 'text-white/60' : 'text-gray-600'}`}>
-            Choisissez le plan adapté à vos événements. Sans engagement.
+          <p className={`text-lg max-w-xl mx-auto ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
+            Choisissez le plan qui propulse vos événements au niveau supérieur.
           </p>
         </div>
 
         {/* GRILLE DES TARIFS */}
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {plans.map((plan, index) => {
-            // Récupération dynamique de l'icône, ou fallback sur 'Zap' si non trouvée
             const Icon = ICON_MAP[plan.icon_name] || Zap;
-            
             return (
               <div
                 key={plan.name || index}
-                className={`relative rounded-3xl border backdrop-blur-xl transition-all duration-300 hover:scale-105 ${
+                className={`group relative rounded-[2rem] p-8 border backdrop-blur-xl transition-all duration-500 hover:-translate-y-4 ${
                   plan.popular
-                    ? 'border-[#6c47ff] shadow-[0_0_60px_rgba(108,71,255,0.3)]'
-                    : dark
-                    ? 'border-white/10 bg-[#12121f]/60'
-                    : 'border-gray-200 bg-white'
+                    ? 'border-[#6c47ff] bg-[#6c47ff]/5 shadow-2xl shadow-[#6c47ff]/20'
+                    : dark ? 'border-white/5 bg-[#0b0a1a]' : 'border-slate-200 bg-white'
                 }`}
               >
-                {/* BADGE POPULAIRE */}
                 {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-[#6c47ff] to-[#8b6bff] text-white text-xs font-bold shadow-lg">
-                    POPULAIRE
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-5 py-1 rounded-full bg-gradient-to-r from-[#6c47ff] to-[#00d4aa] text-white text-[10px] font-black uppercase tracking-widest shadow-lg">
+                    Recommandé
                   </div>
                 )}
                 
-                <div className="p-8">
-                  {/* ICONE ET TITRE */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-[#6c47ff] to-[#00d4aa] flex items-center justify-center shadow-lg">
-                      <Icon size={24} className="text-white" />
-                    </div>
-                    <div>
-                      <h3 className={`text-2xl font-bold ${dark ? 'text-white' : 'text-gray-900'}`}>
-                        {plan.name}
-                      </h3>
-                      <p className={`text-sm ${dark ? 'text-white/50' : 'text-gray-500'}`}>
-                        {plan.description}
-                      </p>
-                    </div>
+                <div className="flex items-center gap-4 mb-8">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${plan.popular ? 'bg-[#6c47ff] text-white' : 'bg-slate-100 dark:bg-slate-800 text-[#6c47ff]'}`}>
+                    <Icon size={24} />
                   </div>
-
-                  {/* PRIX */}
-                  <div className="mb-8">
-                    <div className="flex items-baseline gap-2">
-                      <span className={`text-5xl font-black ${dark ? 'text-white' : 'text-gray-900'}`}>
-                        {plan.price}
-                      </span>
-                      {plan.price !== 'Sur devis' && (
-                        <span className={dark ? 'text-white/60' : 'text-gray-600 font-medium'}>
-                          FCFA/mois
-                        </span>
-                      )}
-                    </div>
+                  <div>
+                    <h3 className={`text-xl font-black ${dark ? 'text-white' : 'text-slate-900'}`}>{plan.name}</h3>
+                    <p className={`text-xs font-bold uppercase tracking-widest opacity-60 ${dark ? 'text-white' : 'text-slate-500'}`}>{plan.description}</p>
                   </div>
-
-                  {/* FONCTIONNALITÉS */}
-                  <ul className="space-y-4 mb-8">
-                    {plan.features && plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <Check size={20} className="text-[#6c47ff] flex-shrink-0 mt-0.5" />
-                        <span className={dark ? 'text-white/80' : 'text-gray-700 font-medium'}>
-                          {feature}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* BOUTON D'ACTION */}
-                  <Link
-                    to="/register"
-                    className={`block w-full text-center py-3 rounded-full font-bold transition-all ${
-                      plan.popular
-                        ? 'bg-gradient-to-r from-[#6c47ff] to-[#8b6bff] text-white shadow-lg shadow-[#6c47ff]/30 hover:shadow-[#6c47ff]/50'
-                        : dark
-                        ? 'bg-white/5 text-white hover:bg-white/10 border border-white/10'
-                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200 border border-gray-200'
-                    }`}
-                  >
-                    {plan.cta}
-                  </Link>
                 </div>
+
+                <div className="mb-8">
+                  <span className={`text-5xl font-black ${dark ? 'text-white' : 'text-slate-900'}`}>{plan.price}</span>
+                  {plan.price !== 'Sur devis' && <span className="ml-2 font-bold opacity-60">FCFA</span>}
+                </div>
+
+                <ul className="space-y-4 mb-8">
+                  {plan.features?.map((feature, i) => (
+                    <li key={i} className="flex items-center gap-3 text-sm font-semibold opacity-80">
+                      <div className="w-5 h-5 rounded-full bg-[#00d4aa]/20 flex items-center justify-center">
+                        <Check size={12} className="text-[#00d4aa]" />
+                      </div>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+
+                <Link to="/register" className={`block w-full py-4 rounded-2xl text-center font-black transition-all ${
+                  plan.popular 
+                    ? 'bg-[#6c47ff] text-white hover:bg-[#5b3ce6]' 
+                    : 'bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10 text-slate-900 dark:text-white'
+                }`}>
+                  Choisir ce plan
+                </Link>
               </div>
             );
           })}
-        </div>
-
-        {/* PIED DE PAGE DES TARIFS */}
-        <div className={`mt-16 text-center ${dark ? 'text-white/60' : 'text-gray-500 font-medium'}`}>
-          <p>Tous les prix sont en FCFA. TVA non applicable.</p>
         </div>
       </div>
     </div>

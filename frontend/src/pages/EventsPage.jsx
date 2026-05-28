@@ -1,64 +1,43 @@
-import { useEffect, useState, useMemo, useRef, memo, useCallback } from 'react';
+import { useEffect, useState, useMemo, memo } from 'react';
 import { useSelector } from 'react-redux';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import Spinner from '../components/ui/Spinner';
-import { Calendar, MapPin, Search, X, Sparkles } from 'lucide-react';
+import { Calendar, MapPin, Search, Filter, Sparkles } from 'lucide-react';
 
-function useInView(threshold = 0.05) {
-  const ref = useRef(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) { setInView(true); obs.disconnect(); }
-    }, { threshold });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return [ref, inView];
-}
-
-const CATEGORY_COLORS = {
-  Concert: 'bg-[#6c47ff]', Conference: 'bg-[#0ea5e9]', Sport: 'bg-[#00d4aa]',
-  Festival: 'bg-[#f5a623]', Concours: 'bg-[#e84393]', Autre: 'bg-gray-500',
-};
 const CATEGORIES_LIST = ['Concert', 'Conference', 'Sport', 'Festival', 'Concours', 'Autre'];
 
 const EventCard = memo(({ event, theme }) => (
   <Link
     to={`/events/${event.id}`}
-    className={`group rounded-[1.5rem] overflow-hidden border transition-all hover:-translate-y-1 hover:shadow-xl ${theme.card}`}
+    className={`group relative rounded-[2rem] overflow-hidden border transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl ${theme.card}`}
   >
-    <div className="relative aspect-[4/5] bg-slate-800 overflow-hidden">
+    <div className="relative aspect-[4/5] overflow-hidden">
       <img
         src={event.image || '/placeholder.webp'}
         alt={event.titre}
-        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
         loading="lazy"
-        decoding="async"
-        width="400"
-        height="500"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-      <div className="absolute top-3 left-3">
-        <span className="bg-black/70 backdrop-blur-md text-white text- font-black px-2.5 py-1 rounded-md flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full ${CATEGORY_COLORS[event.categorie] || CATEGORY_COLORS.Autre}`} />
-          {event.categorie?.toUpperCase()}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+      <div className="absolute top-4 left-4">
+        <span className="bg-white/10 backdrop-blur-lg text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-white/20">
+          {event.categorie}
         </span>
       </div>
     </div>
 
-    <div className="p-4">
-      <h3 className={`text- font-black leading-tight mb-3 line-clamp-2 h-10 ${theme.text}`}>
+    <div className="p-5">
+      <h3 className={`text-[15px] font-black leading-snug mb-4 line-clamp-2 ${theme.text}`}>
         {event.titre}
       </h3>
-      <div className="space-y-1.5">
-        <div className={`flex items-center gap-2 text- font-bold ${theme.sub}`}>
-          <Calendar size={13} className="text-[#6c47ff] shrink-0" />
+      <div className="flex flex-col gap-2.5">
+        <div className={`flex items-center gap-2 text-xs font-semibold ${theme.sub}`}>
+          <Calendar size={14} className="text-[#6c47ff]" />
           {new Date(event.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
         </div>
-        <div className={`flex items-center gap-2 text- font-bold ${theme.sub}`}>
-          <MapPin size={13} className="text-[#00d4aa] shrink-0" />
+        <div className={`flex items-center gap-2 text-xs font-semibold ${theme.sub}`}>
+          <MapPin size={14} className="text-[#00d4aa]" />
           <span className="truncate">{event.lieu}</span>
         </div>
       </div>
@@ -69,120 +48,107 @@ const EventCard = memo(({ event, theme }) => (
 export default function EventsPage() {
   const [searchParams] = useSearchParams();
   const { dark } = useSelector((s) => s.theme);
-
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get('q') || '');
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [categorie, setCategorie] = useState('');
   const [tri, setTri] = useState('recent');
-  const [heroRef, heroInView] = useInView();
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search]);
 
   useEffect(() => {
     const fetchEvents = async () => {
-      const { data } = await supabase
-       .from('events')
-       .select('id, titre, categorie, lieu, date, image')
-       .eq('statut', 'validé')
-       .order('date', { ascending: false })
-       .limit(60);
-      setEvents(data || []);
+      setLoading(true);
+      // Correction : .in() permet de gérer les variations possibles du statut
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .in('statut', ['validé', 'valide', 'Validé', 'Valide', 'VALIDE'])
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error("Erreur chargement événements:", error);
+      } else {
+        setEvents(data || []);
+      }
       setLoading(false);
     };
     fetchEvents();
   }, []);
 
-  const categoryCounts = useMemo(() => {
-    const counts = {};
-    events.forEach(e => { counts[e.categorie] = (counts[e.categorie] || 0) + 1; });
-    return counts;
-  }, [events]);
-
   const filtered = useMemo(() => {
     let r = events;
     if (categorie) r = r.filter(e => e.categorie === categorie);
-    if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
+    if (search) {
+      const q = search.toLowerCase();
       r = r.filter(e => e.titre?.toLowerCase().includes(q) || e.lieu?.toLowerCase().includes(q));
     }
-    return tri === 'recent'? r : [...r].reverse();
-  }, [events, debouncedSearch, categorie, tri]);
-
-  const handleCat = useCallback((cat) => setCategorie(c => c === cat? '' : cat), []);
+    return tri === 'recent' ? r : [...r].reverse();
+  }, [events, search, categorie, tri]);
 
   const theme = {
-    bg: dark? 'bg-[#080812]' : 'bg-[#f8f9ff]',
-    card: dark? 'bg-[#0f0e1a] border-white/10' : 'bg-white border-gray-100',
-    text: dark? 'text-white' : 'text-slate-900',
-    sub: dark? 'text-slate-400' : 'text-slate-500',
+    bg: dark ? 'bg-[#050507]' : 'bg-slate-50',
+    card: dark ? 'bg-[#0b0a1a] border-white/5' : 'bg-white border-slate-100',
+    text: dark ? 'text-white' : 'text-slate-900',
+    sub: dark ? 'text-slate-400' : 'text-slate-500',
   };
 
   return (
-    <div className={`min-h-screen ${theme.bg}`}>
-      <section className="relative h- md:h- flex items-center overflow-hidden bg-slate-900">
-        <img src="/fond-ecran.webp" alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" fetchpriority="high" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080812] to-transparent" />
-        <div ref={heroRef} className={`relative z-10 max-w-7xl mx-auto px-6 transition-opacity duration-500 ${heroInView? 'opacity-100' : 'opacity-0'}`}>
-          <div className="inline-flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-full px-3 py-1 mb-3">
-            <Sparkles size={12} className="text-[#f5a623]" />
-            <span className="text-white text- font-black tracking-widest">EXPÉRIENCES</span>
+    <div className={`min-h-screen pb-20 ${theme.bg}`}>
+      <header className="relative py-16 px-6 bg-[#050812] border-b border-white/5">
+        <div className="max-w-7xl mx-auto">
+          <Link to="/" className="inline-flex items-center text-xs font-bold text-white/50 hover:text-white mb-8 transition-colors">
+            ← RETOUR
+          </Link>
+          <div className="inline-flex items-center gap-2 bg-[#00d4aa]/10 text-[#00d4aa] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-4 border border-[#00d4aa]/20">
+            <Sparkles size={10} /> Réservation ouverte
           </div>
-          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter">
-            NOS <span className="text-[#00d4aa]">ÉVÉNEMENTS</span>
+          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter mb-4">
+            NOS ÉVÉNEMENTS
           </h1>
+          <div className="flex items-center gap-2 text-white/60 text-sm font-medium">
+            <MapPin size={14} /> Abidjan, Côte d'Ivoire
+          </div>
         </div>
-      </section>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 -mt-6 relative z-20">
-        <div className={`flex flex-col lg:flex-row gap-2 p-2 rounded-2xl border backdrop-blur-xl ${theme.card}`}>
+      <main className="max-w-7xl mx-auto px-6 -mt-12">
+        <div className={`flex flex-col md:flex-row gap-4 p-3 rounded-[1.5rem] border backdrop-blur-xl shadow-xl ${theme.card}`}>
           <div className="flex-1 flex items-center gap-3 px-4">
-            <Search size={18} className="text-[#6c47ff] shrink-0" />
+            <Search size={18} className="text-[#6c47ff]" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher..."
-              className="w-full bg-transparent py-3 text-sm font-medium focus:outline-none"
+              placeholder="Rechercher un événement..."
+              className="w-full bg-transparent py-3 text-sm font-bold focus:outline-none placeholder:text-slate-500"
             />
-            {search && <button onClick={() => setSearch('')}><X size={16} className="text-slate-400" /></button>}
           </div>
-          <select value={tri} onChange={e => setTri(e.target.value)} className="bg-transparent px-4 py-3 text-sm font-bold focus:outline-none cursor-pointer">
-            <option value="recent">Plus récents</option>
-            <option value="ancien">Plus anciens</option>
-          </select>
+          <div className="flex items-center gap-2 border-t md:border-t-0 md:border-l border-slate-800/20 px-4">
+            <Filter size={16} className="text-slate-500" />
+            <select value={tri} onChange={e => setTri(e.target.value)} className="bg-transparent py-3 text-sm font-bold focus:outline-none cursor-pointer">
+              <option value="recent">Plus récents</option>
+              <option value="ancien">Plus anciens</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap mt-5">
-          <button onClick={() => setCategorie('')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${!categorie? 'bg-[#6c47ff] text-white' : theme.card}`}>
-            TOUT
-          </button>
-          {CATEGORIES_LIST.map(cat => {
-            const count = categoryCounts[cat] || 0;
-            if (!count) return null;
-            return (
-              <button
-                key={cat}
-                onClick={() => handleCat(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${categorie === cat? 'bg-[#6c47ff] text-white border-transparent' : theme.card}`}
-              >
-                {cat} <span className="opacity-60">{count}</span>
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap gap-2 mt-8 mb-12">
+          <button onClick={() => setCategorie('')} className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${!categorie ? 'bg-[#6c47ff] text-white' : 'bg-white/5 hover:bg-white/10'}`}>Tout</button>
+          {CATEGORIES_LIST.map(cat => (
+            <button key={cat} onClick={() => setCategorie(cat)} className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all ${categorie === cat ? 'bg-[#6c47ff] text-white' : 'bg-white/5 hover:bg-white/10'}`}>
+              {cat}
+            </button>
+          ))}
         </div>
 
-        {loading? (
+        {loading ? (
           <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-8 pb-20">
+        ) : filtered.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {filtered.map(event => <EventCard key={event.id} event={event} theme={theme} />)}
           </div>
+        ) : (
+            <div className={`text-center py-20 ${theme.sub}`}>Aucun événement trouvé.</div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

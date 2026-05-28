@@ -1,391 +1,391 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { supabase } from '../config/supabaseClient'; 
-import api from '../config/api'; 
+import { supabase } from '../config/supabaseClient';
 import Spinner from '../components/ui/Spinner';
 import { 
-  Calendar, MapPin, Minus, Plus, 
-  Share2, CheckCircle2, Image as ImageIcon,
-  ChevronRight, ArrowRight, Phone
+  MapPin, Minus, Plus, ArrowLeft, Share2, Trophy, 
+  Store, PiggyBank, Users, Calendar, Clock, AlertCircle, ArrowRight,
+  ShieldCheck, Mail, Phone, Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function EventDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useSelector((s) => s.auth);
   const { dark } = useSelector((s) => s.theme);
 
   const [event, setEvent] = useState(null);
-  const [tickets, setTickets] = useState([]); 
-  const [similarEvents, setSimilarEvents] = useState([]); 
+  const [tickets, setTickets] = useState([]);
+  const [votesList, setVotesList] = useState([]);
+  const [stands, setStands] = useState([]);
+  const [cagnottes, setCagnottes] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [quantities, setQuantities] = useState({});
-  const [buyerInfo, setBuyerInfo] = useState({ 
-    nom: user?.user_metadata?.nom || user?.nom || '', 
-    email: user?.email || '', 
-    telephone: '' 
-  });
   const [paying, setPaying] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState('about'); 
 
-  // Fonction pour l'image
-  const getImageUrl = (path) => {
+  const getImageUrl = (path, bucket = 'events') => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
-    const { data } = supabase.storage.from('events').getPublicUrl(path);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   };
 
   useEffect(() => {
     const fetchEventData = async () => {
-      if (!id || id === 'create') return;
-
+      if (!id) return;
       try {
         setLoading(true);
-        // 1. Récupération de l'événement actuel
-        const { data: eventData, error: eventError } = await supabase
+        
+        // 1. On récupère d'abord l'événement (C'est le plus important)
+        const { data: eventData, error: eventErr } = await supabase
           .from('events')
-          .select('*, profiles:organisateur_id(nom)')
+          .select('*, profiles:organisateur_id(*)')
           .eq('id', id)
           .single();
 
-        if (eventError) throw eventError;
+        if (eventErr) throw eventErr;
         setEvent(eventData);
 
-        // 2. Récupération des tarifs (Billets)
-        const { data: ticketsData } = await supabase
-          .from('tarifs') 
-          .select('*')
-          .eq('event_id', id)
-          .order('prix', { ascending: true });
+        // 2. On récupère les Tables qui ont bien la colonne 'event_id'
+        const [ticketsRes, standsRes] = await Promise.all([
+          supabase.from('tarifs').select('*').eq('event_id', id).order('prix', { ascending: true }),
+          supabase.from('stands').select('*').eq('event_id', id)
+        ]);
+        
+        setTickets(ticketsRes.data || []);
+        setStands(standsRes.data || []);
 
-        setTickets(ticketsData || []);
+        // 3. On récupère les Votes et Cagnottes de manière SÉCURISÉE 
+        // (Si la colonne event_id n'existe pas encore, ça ne fera plus planter la page)
+        const { data: votesData, error: votesErr } = await supabase.from('votes').select('*').eq('event_id', id);
+        if (!votesErr) setVotesList(votesData || []);
 
-        // 3. LOGIQUE : ÉVÉNEMENTS SIMILAIRES
-        let { data: similarData } = await supabase
-          .from('events')
-          .select('*')
-          .eq('categorie', eventData.categorie || 'Concert')
-          .neq('id', id)
-          .limit(3);
-
-        if (!similarData || similarData.length === 0) {
-          const { data: fallbackData } = await supabase
-            .from('events')
-            .select('*')
-            .neq('id', id)
-            .order('created_at', { ascending: false })
-            .limit(3);
-          similarData = fallbackData;
-        }
-
-        setSimilarEvents(similarData || []);
+        const { data: cagnotteData, error: cagnotteErr } = await supabase.from('cagnottes').select('*').eq('event_id', id);
+        if (!cagnotteErr) setCagnottes(cagnotteData || []);
 
       } catch (err) {
-        console.error("Erreur de chargement:", err);
-        toast.error("Impossible de charger l'événement");
+        console.error("Erreur critique lors du chargement:", err);
+        toast.error("Erreur lors du chargement de l'événement");
       } finally {
         setLoading(false);
-        setQuantities({}); 
       }
     };
     fetchEventData();
   }, [id]);
 
-  useEffect(() => {
-    if (user) {
-      setBuyerInfo(prev => ({ 
-        ...prev, 
-        nom: user.user_metadata?.nom || user.nom || '', 
-        email: user.email || '' 
-      }));
-    }
-  }, [user]);
+  const setQty = (ticketId, delta) => setQuantities(prev => ({...prev, [ticketId]: Math.max(0, (prev[ticketId] || 0) + delta) }));
 
-  const setQty = (ticketId, delta) => {
-    setQuantities(prev => {
-      const cur = prev[ticketId] || 0;
-      const next = Math.max(0, cur + delta);
-      return { ...prev, [ticketId]: next };
-    });
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({ title: event.titre, url: window.location.href }).catch(console.error);
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      toast.success("Lien copié !");
+    }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handlePayment = async () => {
+    setPaying(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { navigate('/login'); return; }
+      
+      const selectedTickets = tickets.filter(t => (quantities[t.id] || 0) > 0).map(t => ({
+          ticket_type_id: t.id, 
+          quantity: quantities[t.id], 
+          unit_price: t.prix
+      }));
+
+      if (total === 0) {
+        const { data, error } = await supabase.functions.invoke('init-geniuspay', {
+          body: { event_id: id, user_id: user.id, tickets: selectedTickets, total_amount: 0 }
+        });
+        if (error) throw error;
+        toast.success("Réservation gratuite validée avec succès !");
+        setPaying(false);
+        return;
+      }
+      
+      const { data, error } = await supabase.functions.invoke('init-geniuspay', {
+        body: { event_id: id, user_id: user.id, tickets: selectedTickets, total_amount: total }
+      });
+      
+      if (error) throw error;
+      if (data?.payment_url) {
+        window.location.href = data.payment_url;
+      } else {
+        toast.success("Réservation validée !");
+      }
+    } catch (err) { 
+      console.error("Erreur détaillée de la fonction backend :", err);
+      toast.error("Le serveur a rencontré une erreur"); 
+    } finally { 
+      setPaying(false); 
+    }
   };
 
   const total = tickets.reduce((acc, t) => acc + (quantities[t.id] || 0) * (t.prix || 0), 0);
-  const hasSelection = Object.values(quantities).some(q => q > 0);
+  const hasSelection = Object.values(quantities).some(qty => qty > 0);
 
-  const handlePay = async () => {
-    if (!user) { navigate('/login'); return; }
-    if (!hasSelection) { toast.error('Sélectionnez au moins un billet'); return; }
-    
-    setPaying(true);
-    try {
-      const selectedTickets = Object.entries(quantities)
-        .filter(([, q]) => q > 0)
-        .map(([ticket_id, quantite]) => ({ ticket_id, quantite }));
-
-      const { data } = await api.post('/payments/checkout', {
-        tickets: selectedTickets,
-        buyer: buyerInfo,
-        event_id: id 
-      });
-
-      sessionStorage.setItem('last_purchases', JSON.stringify(data.data));
-      navigate('/paiement/succes');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Erreur lors de la transaction');
-    } finally { setPaying(false); }
+  const getBadgeStyle = (type) => {
+    const name = (type || '').toLowerCase();
+    if (name.includes('vvip')) return 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-500/20';
+    if (name.includes('vip')) return 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-500/20';
+    return 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 border-transparent';
   };
 
-  const theme = {
-    bg: dark ? 'bg-[#080812]' : 'bg-[#fafbfc]',
-    text: dark ? 'text-white' : 'text-[#0b1129]',
-    sub: dark ? 'text-slate-400' : 'text-slate-500',
-  };
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
+  if (!event) return <div className="text-center py-20">Événement introuvable.</div>;
 
-  if (loading) return (
-    <div className={`min-h-screen ${theme.bg} flex flex-col items-center justify-center gap-4`}>
-      <Spinner size="lg" />
-    </div>
-  );
+  const organizerProfile = event.profiles 
+    ? (Array.isArray(event.profiles) ? event.profiles[0] : event.profiles)
+    : null;
 
-  if (!event) return (
-    <div className={`min-h-screen ${theme.bg} flex flex-col items-center justify-center`}>
-      <ImageIcon size={48} className="text-slate-300 mb-4 opacity-50" />
-      <p className={`font-black uppercase tracking-widest ${theme.sub}`}>Événement introuvable.</p>
-    </div>
-  );
+  const organizerName = organizerProfile?.nom || organizerProfile?.full_name || "Organisateur de l'événement";
+  const organizerEmail = organizerProfile?.email || "Non renseigné";
+  const organizerPhone = organizerProfile?.telephone || organizerProfile?.phone || organizerProfile?.phone_number || "Non renseigné";
 
   return (
-    <div className={`min-h-screen ${theme.bg} pb-20 transition-colors duration-500 font-sans`}>
+    <div className={`min-h-screen ${dark ? 'bg-[#06060c]' : 'bg-[#f4f7fd]'} pb-20`}>
+      
+      <div className="relative w-full bg-[#030712] overflow-hidden py-6 lg:py-8 border-b border-white/5">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_800px_at_100%_0%,rgba(0,184,255,0.18),transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_700px_at_0%_100%,rgba(16,185,129,0.08),transparent_70%)]" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-      {/* --- HERO BANNER CORRIGÉ (Image bien visible) --- */}
-      <div className="relative h-[380px] w-full overflow-hidden bg-[#0b1129]">
-        {event.image_url || event.image ? (
-          <img 
-            src={getImageUrl(event.image_url || event.image)} 
-            alt={event.titre} 
-            className="absolute inset-0 w-full h-full object-cover" 
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-900 to-indigo-900" />
-        )}
-        
-        {/* Dégradé léger uniquement en bas pour que le texte reste lisible */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-
-        <div className="absolute inset-0 flex flex-col justify-end pb-10 max-w-6xl mx-auto px-4 lg:px-8 w-full z-10">
-          <div className="flex items-center text-white/90 text-xs font-bold mb-5 gap-1.5 drop-shadow-md">
-            <Link to="/" className="hover:text-white transition-colors">Accueil</Link> <ChevronRight size={12} />
-            <Link to="/events" className="hover:text-white transition-colors">Événements</Link> <ChevronRight size={12} />
-            <span className="text-[#ffc107] truncate max-w-[200px]">{event.titre}</span>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
-              <span className="bg-[#0052ff] text-white text-[10px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest mb-4 inline-block shadow-md">
-                À la une
-              </span>
-              <h1 className="text-3xl md:text-5xl font-black text-white leading-tight tracking-tight mb-3 drop-shadow-xl">
-                {event.titre}
-              </h1>
-              <div className="flex items-center text-white/90 gap-2 text-sm font-medium drop-shadow-md">
-                <MapPin size={16} className="text-white/80" /> Côte D'Ivoire (Ivory Coast)
-              </div>
-            </div>
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="grid lg:grid-cols-[1.25fr_0.75fr] gap-8 items-center">
             
-            <button onClick={handleCopy} className="flex items-center gap-2 border border-white/40 bg-black/20 hover:bg-white/20 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all backdrop-blur-md shrink-0 shadow-lg">
-              <Share2 size={16} /> Partager
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* --- CONTENU PRINCIPAL --- */}
-      <div className="max-w-6xl mx-auto px-4 lg:px-8 mt-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.2fr] gap-10">
-          
-          {/* COLONNE GAUCHE */}
-          <div>
-            <div className="flex gap-2 mb-8 bg-gray-100/50 dark:bg-white/5 p-1 rounded-2xl inline-flex">
+            <div className="space-y-4 md:space-y-6">
               <button 
-                onClick={() => setActiveTab('about')}
-                className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'about' ? 'bg-white dark:bg-[#1f2937] text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-700' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                onClick={() => navigate(-1)} 
+                className="inline-flex items-center gap-2 text-white/50 hover:text-white transition-all font-black uppercase tracking-widest text-[10px] bg-white/5 hover:bg-white/10 px-4 py-2 rounded-full border border-white/5 shadow-inner w-fit"
               >
-                À propos
+                <ArrowLeft size={12} strokeWidth={3} /> Retour
               </button>
-              <button 
-                onClick={() => setActiveTab('programme')}
-                className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'programme' ? 'bg-white dark:bg-[#1f2937] text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-gray-700' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-              >
-                Programme
-              </button>
-            </div>
-
-            <div className="mb-8">
-              <p className={`text-[15px] leading-relaxed whitespace-pre-line ${theme.sub}`}>
-                {activeTab === 'about' 
-                  ? (event.description || "Aucune description fournie pour cet événement.")
-                  : "Programme détaillé non disponible pour le moment."
-                }
-              </p>
-            </div>
-
-            <div className="flex gap-2 mb-10">
-              <span className="bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 text-xs font-bold px-3 py-1.5 rounded-lg">
-                #{event.categorie?.toLowerCase().replace(/\s+/g, '') || 'evenement'}
-              </span>
-            </div>
-
-            <div className={`flex items-center gap-4 border p-4 rounded-2xl transition-colors ${dark ? 'border-gray-800 bg-[#111827]' : 'border-gray-100 bg-white shadow-sm'}`}>
-              <div className="w-14 h-14 bg-[#0052ff] text-white rounded-xl flex items-center justify-center font-black text-2xl shadow-inner">
-                {event.profiles?.nom?.charAt(0)?.toUpperCase() || 'O'}
-              </div>
-              <div>
-                <p className="text-[11px] text-gray-400 uppercase tracking-wider font-bold mb-0.5">Organisateur</p>
-                <p className={`font-black text-base flex items-center gap-1.5 ${theme.text}`}>
-                  {event.profiles?.nom?.toUpperCase() || 'ANONYME'} 
-                  <CheckCircle2 size={16} className="text-[#0052ff] fill-blue-100 dark:fill-blue-900" />
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* COLONNE DROITE : BILLETS DYNAMIQUES */}
-          <div className="relative">
-            <div className={`rounded-[20px] overflow-hidden border shadow-[0_8px_30px_rgb(0,0,0,0.08)] sticky top-24 ${dark ? 'bg-[#111827] border-gray-800' : 'bg-white border-gray-200'}`}>
               
-              <div className="bg-[#0052ff] p-5 text-white">
-                <h3 className="font-bold text-[18px] tracking-tight mb-1">Obtenir des billets</h3>
-                <p className="text-sm flex items-center gap-1.5 font-medium opacity-90">
-                  <Calendar size={14}/> 
-                  {event.date ? new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' }) : 'Date à définir'} à {event.heure || '--h--'}
-                </p>
+              <div className="space-y-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase bg-gradient-to-r from-sky-500/20 to-blue-500/20 text-sky-400 border border-sky-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" /> Événement Vedette
+                </span>
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white leading-[0.95] tracking-tight max-w-3xl drop-shadow-sm">
+                  {event.titre}
+                </h1>
               </div>
 
-              <div className="p-6 space-y-4">
-                {tickets.length === 0 ? (
-                  <p className="text-center text-sm font-bold text-gray-400 py-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-                    Les billets seront bientôt disponibles.
-                  </p>
-                ) : (
-                  tickets.map(t => (
-                    <div key={t.id} className={`border rounded-2xl p-4 transition-colors ${dark ? 'border-gray-700 bg-[#1f2937]' : 'border-gray-200/80 bg-white'}`}>
-                      <div className="flex justify-between items-center mb-3">
-                        <span className={`font-bold text-[14px] uppercase tracking-wide ${theme.text}`}>{t.type || t.nom}</span>
-                        <span className={`font-black text-[15px] ${theme.text}`}>
-                          {t.prix === 0 ? 'GRATUIT' : `${t.prix?.toLocaleString('fr-FR').replace(',', ' ')} FCFA`}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={() => setQty(t.id, -1)} 
-                          className={`w-8 h-8 flex items-center justify-center border rounded-lg transition-colors ${dark ? 'border-gray-600 text-gray-400 hover:bg-gray-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                        >
-                          <Minus size={14} strokeWidth={2.5} />
-                        </button>
-                        <span className={`text-[15px] font-bold w-4 text-center ${theme.text}`}>{quantities[t.id] || 0}</span>
-                        <button 
-                          onClick={() => setQty(t.id, 1)} 
-                          className={`w-8 h-8 flex items-center justify-center border rounded-lg transition-colors ${dark ? 'border-gray-600 text-gray-400 hover:bg-gray-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                        >
-                          <Plus size={14} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-                
-                <div className="pt-2">
-                  <div className={`flex justify-between items-center py-4`}>
-                    <span className={`text-[15px] font-medium ${theme.sub}`}>Total</span>
-                    <span className={`font-black text-lg ${theme.text}`}>
-                      {total > 0 ? `${total.toLocaleString('fr-FR').replace(',', ' ')} FCFA` : <Minus size={20} className="opacity-80" strokeWidth={3} />}
-                    </span>
+              <div className="flex flex-wrap gap-3 pt-1">
+                <div className="flex items-center gap-2.5 bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl px-4 py-2.5 rounded-2xl text-white/90 border border-white/[0.06] text-xs font-bold shadow-2xl transition-all">
+                  <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400"><Calendar size={14} strokeWidth={2.5} /></div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Date</span>
+                    <span>{new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' })}</span>
                   </div>
+                </div>
 
-                  <button 
-                    onClick={handlePay}
-                    disabled={!hasSelection || paying}
-                    className={`w-full py-3.5 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all duration-300 ${
-                      hasSelection 
-                        ? 'bg-[#0052ff] text-white shadow-md shadow-blue-500/30 hover:bg-blue-700' 
-                        : 'bg-[#93bbf9] text-white cursor-not-allowed'
-                    }`}
-                  >
-                    {paying ? <Spinner size="sm" color="white" /> : 'Passer à la caisse'} <ArrowRight size={16} strokeWidth={2.5} />
-                  </button>
+                <div className="flex items-center gap-2.5 bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl px-4 py-2.5 rounded-2xl text-white/90 border border-white/[0.06] text-xs font-bold shadow-2xl transition-all">
+                  <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400"><Clock size={14} strokeWidth={2.5} /></div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Heure</span>
+                    <span>{event.heure?.slice(0, 5) || "12:30"}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 bg-white/[0.04] hover:bg-white/[0.08] backdrop-blur-xl px-4 py-2.5 rounded-2xl text-white/90 border border-white/[0.06] text-xs font-bold shadow-2xl transition-all">
+                  <div className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400"><MapPin size={14} strokeWidth={2.5} /></div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Lieu</span>
+                    <span className="max-w-[150px] truncate">{event.lieu}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className={`mt-4 border rounded-[20px] p-5 transition-colors ${dark ? 'bg-[#111827] border-gray-800' : 'bg-[#fafbfc] border-gray-100 shadow-sm'}`}>
-              <p className={`text-xs font-bold mb-2 ${theme.sub}`}>Contact</p>
-              <p className={`text-sm font-medium flex items-center gap-2 ${theme.text}`}>
-                <Phone size={16} className="text-gray-500" /> 0709079299
-              </p>
-            </div>
+            {event.image && (
+              <div className="hidden lg:block relative w-full h-full group">
+                <div className="absolute -inset-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-emerald-500 rounded-3xl blur-xl opacity-25 group-hover:opacity-40 transition-all duration-1000" />
+                <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] transform group-hover:scale-[1.02] transition-all duration-500">
+                  <img src={getImageUrl(event.image)} className="w-full h-40 md:h-48 object-cover object-top" alt={event.titre} />
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
 
-      {/* --- ÉVÉNEMENTS SIMILAIRES --- */}
-      {similarEvents.length > 0 && (
-        <div className="max-w-6xl mx-auto px-4 lg:px-8 mt-20 pt-10 border-t border-gray-200 dark:border-gray-800">
-          <h2 className={`text-2xl font-black mb-8 ${theme.text}`}>Événements similaires</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {similarEvents.map((simEvent) => (
-               <div key={simEvent.id} className={`rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col ${dark ? 'bg-[#111827] border-gray-800' : 'bg-white border-gray-200'}`}>
-                 
-                 <div className="relative h-40 bg-gray-200 dark:bg-gray-800">
-                   {simEvent.image_url || simEvent.image ? (
-                     <img src={getImageUrl(simEvent.image_url || simEvent.image)} alt={simEvent.titre} className="w-full h-full object-cover" />
-                   ) : (
-                     <div className="w-full h-full flex items-center justify-center"><ImageIcon className="text-gray-400 opacity-50" size={32}/></div>
-                   )}
-                   <div className="absolute inset-0 bg-black/20" />
-
-                   <div className="absolute top-3 left-3 bg-[#ffc107] text-black text-[10px] font-black uppercase px-2 py-1 rounded">
-                      Événement
-                   </div>
-                   <div className="absolute top-3 right-3 bg-black/50 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1">
-                      <MapPin size={10} /> {simEvent.lieu?.split(',')[0] || "Côte D'Ivoire"}
-                   </div>
-                 </div>
-
-                 <div className="p-4 flex flex-col flex-1">
-                   <h4 className={`font-black text-[15px] mb-1 leading-tight line-clamp-1 ${theme.text}`}>{simEvent.titre}</h4>
-                   <p className={`text-xs ${theme.sub} line-clamp-2 mb-4`}>{simEvent.description || "Aucune description fournie pour cet événement..."}</p>
-                   
-                   <div className="flex items-center justify-between mt-auto">
-                      <span className="text-[11px] font-bold text-gray-500 flex items-center gap-1">
-                        <Calendar size={12}/> 
-                        {simEvent.date ? new Date(simEvent.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : 'À venir'}
-                      </span>
-                      <button 
-                        onClick={() => navigate(`/events/${simEvent.id}`)}
-                        className="bg-[#0052ff] text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Voir plus
-                      </button>
-                   </div>
-                 </div>
-               </div>
-            ))}
+      <main className="max-w-7xl mx-auto px-6 mt-10 grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-10 items-start">
+        <section className="space-y-8">
+          <div className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[2.5rem] border border-slate-100 dark:border-slate-800/60 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600" />
+            <div className="flex items-center gap-2 mb-4"><span className="w-8 h-px bg-sky-500/50"></span><span className="text-xs font-black uppercase tracking-widest text-sky-500">Expérience immersive</span></div>
+            <h3 className="text-xl font-bold mb-6 tracking-tight text-slate-800 dark:text-white">À propos de l'événement</h3>
+            {event.image && (
+              <div className="mb-8 overflow-hidden rounded-[1.8rem] shadow-lg group relative">
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 via-transparent to-transparent z-10 opacity-60" />
+                <img src={getImageUrl(event.image)} className="w-full h-64 md:h-[24rem] object-cover object-top" alt="event" />
+              </div>
+            )}
+            <div className="text-slate-600 dark:text-slate-300 leading-relaxed text-base whitespace-pre-wrap font-medium tracking-wide border-l border-slate-100 dark:border-slate-800/80 pl-4">{event.description}</div>
           </div>
-        </div>
-      )}
+
+          <div className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[2.5rem] border border-slate-100 dark:border-slate-800/60 shadow-xl relative overflow-hidden">
+            <div className="absolute -right-12 -bottom-12 w-40 h-40 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+            <h4 className="text-xl font-black tracking-tight text-slate-900 dark:text-white mb-6 flex items-center gap-2.5"><Building2 size={22} className="text-emerald-500" />Organisateur & Contact</h4>
+            <div className="grid md:grid-cols-2 gap-6 items-center">
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/10 shadow-sm"><ShieldCheck size={24} /></div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Certifié par la plateforme</span>
+                  <p className="text-lg font-black text-slate-800 dark:text-white mt-0.5">{organizerName}</p>
+                </div>
+              </div>
+              <div className="space-y-3 pl-2">
+                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400 text-sm font-semibold"><MapPin size={16} className="text-slate-400 shrink-0" /><span className="truncate">{event.lieu}</span></div>
+                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400 text-sm font-semibold"><Mail size={16} className="text-slate-400 shrink-0" /><span className="truncate">{organizerEmail}</span></div>
+                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400 text-sm font-semibold"><Phone size={16} className="text-slate-400 shrink-0" /><span>{organizerPhone}</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside className="space-y-6 lg:sticky lg:top-8">
+          
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-slate-800 relative overflow-hidden">
+            <div className="absolute -right-16 -top-16 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="font-black text-2xl tracking-tight text-slate-900 dark:text-white">Billetterie</h3>
+                <p className="text-xs text-slate-400 font-semibold mt-1">Sélectionnez vos accès uniques</p>
+              </div>
+              <button onClick={handleShare} className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-sky-500 hover:text-white transition-all shadow-sm active:scale-95"><Share2 size={18} /></button>
+            </div>
+            
+            <div className="space-y-5">
+              {tickets.length > 0 ? (
+                tickets.map(t => {
+                  const isVVIP = (t.type || t.nom).toLowerCase().includes('vvip');
+                  const isVIP = !isVVIP && (t.type || t.nom).toLowerCase().includes('vip');
+                  
+                  return (
+                    <div key={t.id} className="relative group overflow-hidden rounded-[1.5rem] border border-slate-100 dark:border-slate-700/60 shadow-sm transition-all duration-300 hover:shadow-xl">
+                      <div className="absolute inset-0 z-0">
+                        <div className={`w-full h-full opacity-10 dark:opacity-20 ${
+                          isVVIP ? 'bg-gradient-to-br from-purple-500 to-indigo-600' :
+                          isVIP ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+                          'bg-slate-200 dark:bg-slate-700'
+                        }`} />
+                        <div className="absolute inset-0 opacity-[0.03] dark:opacity-5 mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
+                      </div>
+
+                      <div className="relative z-10 p-5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm h-full flex flex-col justify-between">
+                        <div className="flex justify-between items-start mb-6">
+                          <div className="space-y-1">
+                            <span className={`inline-block text-[10px] uppercase font-extrabold tracking-wider px-3 py-1 rounded-full shadow-sm border ${getBadgeStyle(t.type || t.nom)}`}>
+                              {t.type || t.nom}
+                            </span>
+                            {t.description && <p className="text-[11px] text-slate-500 font-medium max-w-[200px] mt-2">{t.description}</p>}
+                          </div>
+                          
+                          <div className="flex items-center gap-2.5 bg-white dark:bg-slate-800 p-1.5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                            <button onClick={() => setQty(t.id, -1)} className="w-7 h-7 flex items-center justify-center bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg hover:bg-rose-500 hover:text-white transition-all active:scale-95"><Minus size={14} strokeWidth={3} /></button>
+                            <span className="font-black text-sm w-5 text-center text-slate-800 dark:text-white select-none">{quantities[t.id] || 0}</span>
+                            <button onClick={() => setQty(t.id, 1)} className="w-7 h-7 flex items-center justify-center bg-sky-500 text-white rounded-lg shadow-sm hover:bg-sky-600 transition-all active:scale-95"><Plus size={14} strokeWidth={3} /></button>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-end">
+                          <p className={`font-black text-3xl tracking-tight ${t.prix > 0 ? 'text-slate-900 dark:text-white' : 'text-emerald-500 dark:text-emerald-400'}`}>
+                            {t.prix > 0 ? <>{t.prix.toLocaleString()} <span className="text-xs font-bold text-slate-400 ml-1">FCFA</span></> : 'GRATUIT'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 px-4 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50/50 dark:bg-slate-800/20">
+                  <AlertCircle size={32} className="text-slate-400 mb-2.5" /><p className="text-sm font-bold text-slate-500 text-center">Aucun ticket configuré pour cet événement.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-dashed border-slate-200 dark:border-slate-700">
+              <div className="flex justify-between items-center mb-6">
+                <div><span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Montant total</span></div>
+                
+                <span className={`text-4xl font-black tracking-tight ${hasSelection && total === 0 ? 'text-emerald-500' : 'text-sky-500'}`}>
+                  {hasSelection && total === 0 ? 'GRATUIT' : <>{total.toLocaleString()} <span className="text-sm font-black text-sky-600">FCFA</span></>}
+                </span>
+              </div>
+
+              <button 
+                onClick={handlePayment} 
+                disabled={!hasSelection || paying} 
+                className={`w-full relative group text-white py-4 rounded-2xl font-black text-lg uppercase tracking-wider shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 disabled:opacity-40 disabled:translate-y-0 ${hasSelection && total === 0 ? 'bg-gradient-to-r from-emerald-400 to-teal-500 shadow-emerald-500/20 hover:shadow-emerald-500/40' : 'bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 shadow-blue-500/20 hover:shadow-blue-500/40'}`}
+              >
+                {paying ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Spinner size="sm" color="white" /> 
+                    <span>{hasSelection && total === 0 ? 'Validation...' : 'Sécurisation...'}</span>
+                  </div>
+                ) : (
+                  hasSelection && total === 0 ? 'Valider le ticket gratuit' : 'Confirmer ma réservation'
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800/80 transition-all duration-300 hover:shadow-2xl">
+            <div className="flex items-center gap-3 mb-5"><div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.15)]"><Trophy size={20} strokeWidth={2.5} /></div><div><h4 className="font-black text-lg tracking-tight">Concours & Votes</h4><p className="text-[11px] text-slate-400 font-medium">Soutenez vos favoris</p></div></div>
+            {votesList.length > 0 ? (
+              <div className="space-y-3">
+                {votesList.map(v => (
+                  <div key={v.id} onClick={() => navigate(`/votes/${v.id}`)} className="group flex justify-between items-center p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50 hover:border-amber-400/40 hover:bg-amber-50/10 cursor-pointer transition-all duration-300">
+                    <div className="space-y-1">
+                      <p className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-500 transition-colors">{v.title}</p>
+                      <span className="flex items-center gap-1.5 text-xs text-slate-400 font-medium"><Users size={12}/> {v.total_votes || 0} Votes totaux</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center border shadow-sm group-hover:bg-amber-500 group-hover:text-white transition-all"><ArrowRight size={14} /></div>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="text-center py-5 border border-dashed rounded-2xl bg-slate-50/50 dark:bg-slate-800/10"><p className="text-xs text-slate-400 italic font-medium">Aucun concours actif lié à l'événement</p></div>}
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800/80 transition-all duration-300 hover:shadow-2xl">
+            <div className="flex items-center gap-3 mb-5"><div className="p-2.5 rounded-xl bg-sky-500/10 text-sky-500 shadow-[0_0_20px_rgba(14,165,233,0.15)]"><Store size={20} strokeWidth={2.5} /></div><div><h4 className="font-black text-lg tracking-tight">Stands Exposants</h4><p className="text-[11px] text-slate-400 font-medium">Espaces commerciaux disponibles</p></div></div>
+            {stands.length > 0 ? (
+              <div className="space-y-3">
+                {stands.map(s => (
+                  <div key={s.id} className="flex justify-between items-center p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50">
+                    <div><p className="font-bold text-slate-800 dark:text-slate-200">{s.nom}</p><span className="text-xs text-sky-500 font-extrabold">{s.prix > 0 ? `${s.prix.toLocaleString()} FCFA` : 'GRATUIT'}</span></div>
+                    <button className="px-3 py-1.5 text-xs font-black bg-white dark:bg-slate-800 border rounded-lg shadow-sm hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all">Réserver</button>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="text-center py-5 border border-dashed rounded-2xl bg-slate-50/50 dark:bg-slate-800/10"><p className="text-xs text-slate-400 italic font-medium">Les réservations de stands ne sont pas ouvertes</p></div>}
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-800/80 transition-all duration-300 hover:shadow-2xl">
+            <div className="flex items-center gap-3 mb-5"><div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.15)]"><PiggyBank size={20} strokeWidth={2.5} /></div><div><h4 className="font-black text-lg tracking-tight">Cagnottes Solidaires</h4><p className="text-[11px] text-slate-400 font-medium">Soutenez le financement du projet</p></div></div>
+            {cagnottes.length > 0 ? (
+              <div className="space-y-4">
+                {/* CORRECTION : Utilisation de montant_actuel et objectif_montant */}
+                {cagnottes.map(cg => {
+                  const pct = Math.min(100, Math.round((cg.montant_actuel / cg.objectif_montant) * 100)) || 0;
+                  return (
+                    <div key={cg.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/50 space-y-2">
+                      <div className="flex justify-between items-center"><p className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[70%]">{cg.titre}</p><span className="text-xs font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md">{pct}%</span></div>
+                      <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all duration-1000 rounded-full" style={{ width: `${pct}%` }} /></div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : <div className="text-center py-5 border border-dashed rounded-2xl bg-slate-50/50 dark:bg-slate-800/10"><p className="text-xs text-slate-400 italic font-medium">Aucune cagnotte active pour le moment</p></div>}
+          </div>
+        </aside>
+      </main>
     </div>
   );
 }

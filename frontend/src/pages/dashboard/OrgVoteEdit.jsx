@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { supabase } from '../../config/supabaseClient';
 import { 
   ArrowLeft, Save, Upload, Calendar, FileText, 
-  Type, ListFilter, ImageIcon 
+  Type, ListFilter, ImageIcon, Sparkles, Settings2 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
@@ -44,7 +44,7 @@ export default function OrgVoteEdit() {
         .from('votes')
         .select('*')
         .eq('id', id)
-        .eq('organisateur_id', user.id)
+        .eq('organizer_id', user.id) // CORRIGÉ : organizer_id au lieu de organisateur_id
         .single();
 
       if (error) throw error;
@@ -55,8 +55,6 @@ export default function OrgVoteEdit() {
       }
 
       const isKnownCategory = CATEGORIES.some(c => c.value === data.categorie);
-      
-      // Conversion de la date pour l'input datetime-local
       const dateFormatee = data.date_fin ? new Date(data.date_fin).toISOString().slice(0, 16) : '';
 
       setFormData({
@@ -86,9 +84,6 @@ export default function OrgVoteEdit() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // =========================================================
-  // 🛠️ GESTION DE L'IMAGE (CORRIGÉE : Bucket 'vote-images')
-  // =========================================================
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -101,7 +96,6 @@ export default function OrgVoteEdit() {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `covers/${user.id}/${fileName}`;
 
-      // ✅ CORRECTION DU NOM DU BUCKET : 'vote-images' (SANS S)
       const { error: uploadError } = await supabase.storage
         .from('vote-images') 
         .upload(filePath, file);
@@ -113,7 +107,7 @@ export default function OrgVoteEdit() {
         .getPublicUrl(filePath);
 
       setFormData(prev => ({ ...prev, image_url: publicUrl }));
-      toast.success("Image mise à jour");
+      toast.success("Image mise à jour avec succès");
     } catch (error) {
       console.error("Upload error:", error);
       toast.error("Échec de l'envoi de l'image");
@@ -124,7 +118,7 @@ export default function OrgVoteEdit() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.titre || !formData.date_fin) return toast.error("Complétez les champs obligatoires");
+    if (!formData.titre || !formData.date_fin) return toast.error("Veuillez compléter les champs obligatoires");
 
     setSaving(true);
     try {
@@ -140,11 +134,11 @@ export default function OrgVoteEdit() {
           categorie: finalCategorie,
         })
         .eq('id', id)
-        .eq('organisateur_id', user.id);
+        .eq('organizer_id', user.id); // CORRIGÉ
 
       if (error) throw error;
 
-      toast.success('Concours mis à jour !');
+      toast.success('Modifications enregistrées !');
       navigate('/dashboard/votes'); 
     } catch (error) {
       toast.error("Erreur lors de la sauvegarde");
@@ -153,114 +147,193 @@ export default function OrgVoteEdit() {
     }
   };
 
+  // 💎 THÈME ULTRA PREMIUM 
   const theme = useMemo(() => ({
-    bg: dark ? 'bg-[#080812]' : 'bg-[#f8f9ff]',
-    card: dark ? 'bg-[#12121f] border-white/5 shadow-2xl' : 'bg-white border-gray-100 shadow-xl shadow-gray-200/50',
+    bg: dark ? 'bg-[#030305]' : 'bg-[#f4f5f7]',
+    card: dark ? 'bg-white/[0.02] border-white/5 backdrop-blur-2xl shadow-2xl shadow-black/50' : 'bg-white border-slate-200 shadow-xl shadow-slate-200/50',
+    section: dark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-100',
     text: dark ? 'text-white' : 'text-slate-900',
     sub: dark ? 'text-slate-400' : 'text-slate-500',
-    input: dark ? 'bg-white/5 border-white/10 text-white focus:border-[#6c47ff]' : 'bg-slate-50 border-gray-200 text-gray-900 focus:border-[#6c47ff]',
+    input: dark 
+      ? 'bg-black/40 border-white/10 text-white focus:border-[#6c47ff] focus:ring-1 focus:ring-[#6c47ff] focus:bg-black/60' 
+      : 'bg-white border-slate-300 text-slate-900 focus:border-[#6c47ff] focus:ring-1 focus:ring-[#6c47ff] focus:bg-slate-50 shadow-sm',
+    label: dark ? 'text-slate-300' : 'text-slate-700',
   }), [dark]);
 
   if (loading) return <div className={`min-h-screen flex items-center justify-center ${theme.bg}`}><Spinner size="xl" /></div>;
 
   return (
-    <div className={`min-h-screen pt-8 pb-20 transition-colors duration-300 ${theme.bg}`}>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+    <div className={`min-h-screen pt-8 pb-24 transition-colors duration-500 ${theme.bg} relative overflow-hidden`}>
+      
+      {/* 🌟 Background Glow subtil en mode dark */}
+      {dark && (
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-[#6c47ff]/10 blur-[120px] rounded-full pointer-events-none -z-10" />
+      )}
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10">
         
         {/* HEADER */}
-        <div className="flex items-center gap-5 mb-8">
+        <div className="flex items-center gap-6 mb-10">
           <button 
             onClick={() => navigate('/dashboard/votes')} 
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${dark ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-white border-gray-200 text-slate-600 hover:shadow-md'}`}
+            className={`group w-12 h-12 rounded-2xl flex items-center justify-center border transition-all duration-300 hover:-translate-x-1 ${dark ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-white border-slate-200 text-slate-600 hover:shadow-lg'}`}
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={20} className="group-hover:text-[#6c47ff] transition-colors" />
           </button>
           <div>
-            <h1 className={`text-2xl md:text-3xl font-black tracking-tight ${theme.text}`}>Paramètres du Vote</h1>
-            <p className={`text-[10px] font-black uppercase tracking-[0.2em] mt-1 ${theme.sub}`}>Gestion du concours</p>
+            <h1 className={`text-3xl md:text-4xl font-black tracking-tight ${theme.text}`}>Paramètres de l'Événement</h1>
+            <p className={`text-[11px] font-bold uppercase tracking-[0.2em] mt-1 text-[#6c47ff]`}>Mode Édition</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className={`rounded-[2.5rem] border p-6 md:p-10 ${theme.card}`}>
-          <div className="space-y-8">
-            
-            {/* TITRE */}
-            <div>
-              <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest mb-3 ${theme.text}`}>
-                <Type size={14} className="text-[#6c47ff]" /> Nom du Concours
-              </label>
-              <input type="text" name="titre" value={formData.titre} onChange={handleChange} required className={`w-full px-5 py-4 rounded-2xl border outline-none font-bold transition-all ${theme.input}`} />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          
+          {/* SECTION 1 : VISUEL (Mise en avant du côté événementiel) */}
+          <div className={`rounded-3xl border p-6 md:p-8 transition-all ${theme.card}`}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 rounded-lg bg-[#f5a623]/10 flex items-center justify-center text-[#f5a623]">
+                <ImageIcon size={16} />
+              </div>
+              <h2 className={`text-lg font-bold ${theme.text}`}>Affiche Officielle</h2>
             </div>
 
-            {/* CATEGORIE */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest mb-3 ${theme.text}`}>
-                  <ListFilter size={14} className="text-[#00d4aa]" /> Catégorie
-                </label>
-                <select name="categorie" value={formData.categorie} onChange={handleChange} className={`w-full px-5 py-4 rounded-2xl border outline-none font-bold appearance-none cursor-pointer ${theme.input}`}>
-                  {CATEGORIES.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
-                </select>
-              </div>
-
-              {formData.categorie === 'autre' && (
-                <div className="animate-in fade-in slide-in-from-top-2">
-                  <label className={`text-[10px] font-black uppercase tracking-widest mb-3 ${theme.text}`}>Précisez le type</label>
-                  <input type="text" name="categorie_autre" value={formData.categorie_autre} onChange={handleChange} required placeholder="Ex: Photographie..." className={`w-full px-5 py-4 rounded-2xl border outline-none font-bold ${theme.input}`} />
+            <div className={`relative flex items-center justify-center w-full h-64 md:h-80 rounded-2xl border-2 border-dashed transition-all duration-300 overflow-hidden group ${dark ? 'border-white/10 bg-black/40 hover:border-[#f5a623]/50' : 'border-slate-300 bg-slate-50 hover:border-[#f5a623]/50'}`}>
+              {uploadingImage ? (
+                <div className="flex flex-col items-center gap-3">
+                  <Spinner size="lg" color="#f5a623" />
+                  <span className={`text-xs font-bold uppercase tracking-widest ${theme.sub}`}>Traitement de l'image...</span>
+                </div>
+              ) : formData.image_url ? (
+                <div className="relative w-full h-full">
+                  <img src={formData.image_url} alt="Affiche" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 flex flex-col items-center justify-end pb-8 transition-all duration-300">
+                    <span className="text-white text-[11px] font-black uppercase tracking-widest bg-white/10 backdrop-blur-md px-6 py-3 rounded-xl border border-white/20 shadow-2xl flex items-center gap-2">
+                      <Upload size={14} /> Modifier l'affiche
+                    </span>
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-4 text-center p-6">
+                  <div className="w-16 h-16 rounded-3xl bg-white shadow-xl flex items-center justify-center text-slate-300 transition-transform duration-300 group-hover:scale-110 group-hover:text-[#f5a623]">
+                    <Upload size={28} />
+                  </div>
+                  <div>
+                    <p className={`font-bold ${theme.text}`}>Glissez ou cliquez pour uploader</p>
+                    <p className={`text-[11px] uppercase tracking-widest mt-1 ${theme.sub}`}>Format recommandé : 1080x1080px (Max 5Mo)</p>
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                 </div>
               )}
             </div>
+          </div>
 
-            {/* DESCRIPTION */}
-            <div>
-              <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest mb-3 ${theme.text}`}>
-                <FileText size={14} className="text-indigo-500" /> Description & Règles
-              </label>
-              <textarea name="description" value={formData.description} onChange={handleChange} rows="4" className={`w-full px-5 py-4 rounded-2xl border outline-none font-bold resize-none ${theme.input}`}></textarea>
+          {/* SECTION 2 : INFORMATIONS PRINCIPALES */}
+          <div className={`rounded-3xl border p-6 md:p-8 transition-all ${theme.card}`}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 rounded-lg bg-[#00d4aa]/10 flex items-center justify-center text-[#00d4aa]">
+                <Sparkles size={16} />
+              </div>
+              <h2 className={`text-lg font-bold ${theme.text}`}>Détails de la Compétition</h2>
             </div>
 
-            {/* IMAGE (UPLOAD CORRIGÉ) */}
-            <div>
-              <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest mb-3 ${theme.text}`}>
-                <Upload size={14} className="text-[#f5a623]" /> Affiche de couverture
-              </label>
-              <div className={`relative flex items-center justify-center w-full h-56 rounded-[2rem] border-2 border-dashed transition-all overflow-hidden ${dark ? 'border-white/10 bg-black/20' : 'border-gray-200 bg-gray-50'}`}>
-                {uploadingImage ? (
-                  <Spinner size="md" />
-                ) : formData.image_url ? (
-                  <div className="relative w-full h-full group">
-                    <img src={formData.image_url} alt="Affiche" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                      <span className="text-white text-[10px] font-black uppercase tracking-widest bg-white/20 backdrop-blur-md px-6 py-3 rounded-xl border border-white/20">Changer l'affiche</span>
-                    </div>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 text-center p-6">
-                    <div className="w-12 h-12 rounded-2xl bg-[#f5a623]/10 flex items-center justify-center text-[#f5a623]"><ImageIcon size={24} /></div>
-                    <span className={`text-[11px] font-black uppercase tracking-widest ${theme.sub}`}>Cliquez pour ajouter l'affiche</span>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                  </div>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <label className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest mb-2.5 ${theme.label}`}>
+                  Titre du Concours <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative flex items-center">
+                  <Type size={16} className={`absolute left-5 transition-colors ${theme.sub}`} />
+                  <input type="text" name="titre" value={formData.titre} onChange={handleChange} required placeholder="Ex: Miss Côte d'Ivoire 2026..." className={`w-full pl-12 pr-5 py-4 rounded-2xl outline-none font-semibold transition-all duration-300 ${theme.input}`} />
+                </div>
+              </div>
+
+              <div>
+                <label className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest mb-2.5 ${theme.label}`}>
+                  Catégorie
+                </label>
+                <div className="relative flex items-center">
+                  <ListFilter size={16} className={`absolute left-5 transition-colors ${theme.sub}`} />
+                  <select name="categorie" value={formData.categorie} onChange={handleChange} className={`w-full pl-12 pr-5 py-4 rounded-2xl outline-none font-semibold appearance-none cursor-pointer transition-all duration-300 ${theme.input}`}>
+                    {CATEGORIES.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {formData.categorie === 'autre' ? (
+                <div className="animate-in fade-in slide-in-from-bottom-2">
+                  <label className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest mb-2.5 ${theme.label}`}>Précisez</label>
+                  <input type="text" name="categorie_autre" value={formData.categorie_autre} onChange={handleChange} required placeholder="Type d'événement..." className={`w-full px-5 py-4 rounded-2xl outline-none font-semibold transition-all duration-300 ${theme.input}`} />
+                </div>
+              ) : (
+                <div className="hidden md:block"></div>
+              )}
+
+              <div className="md:col-span-2">
+                <label className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest mb-2.5 ${theme.label}`}>
+                  Description & Règles
+                </label>
+                <div className="relative">
+                  <FileText size={16} className={`absolute left-5 top-5 transition-colors ${theme.sub}`} />
+                  <textarea name="description" value={formData.description} onChange={handleChange} rows="4" placeholder="Décrivez les règles, les récompenses, le concept..." className={`w-full pl-12 pr-5 py-4 rounded-2xl outline-none font-semibold resize-none transition-all duration-300 ${theme.input}`}></textarea>
+                </div>
               </div>
             </div>
+          </div>
 
-            {/* DATE FIN */}
-            <div>
-              <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest mb-3 ${theme.text}`}>
-                <Calendar size={14} className="text-rose-500" /> Fin des votes
-              </label>
-              <input type="datetime-local" name="date_fin" value={formData.date_fin} onChange={handleChange} required className={`w-full px-5 py-4 rounded-2xl border outline-none font-bold ${theme.input} [color-scheme:dark]`} />
+          {/* SECTION 3 : PARAMÈTRES AVANCÉS */}
+          <div className={`rounded-3xl border p-6 md:p-8 transition-all ${theme.card}`}>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-500">
+                <Settings2 size={16} />
+              </div>
+              <h2 className={`text-lg font-bold ${theme.text}`}>Configuration du Vote</h2>
+            </div>
+
+            <div className={`p-5 md:p-6 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-6 ${theme.section}`}>
+              <div>
+                <h3 className={`font-bold text-sm ${theme.text}`}>Clôture des votes</h3>
+                <p className={`text-xs mt-1 max-w-sm ${theme.sub}`}>Définissez la date et l'heure exactes auxquelles les votes seront automatiquement fermés pour le public.</p>
+              </div>
+              <div className="w-full md:w-64 shrink-0">
+                <div className="relative flex items-center">
+                  <Calendar size={16} className={`absolute left-4 transition-colors ${theme.sub} pointer-events-none z-10`} />
+                  <input 
+                    type="datetime-local" 
+                    name="date_fin" 
+                    value={formData.date_fin} 
+                    onChange={handleChange} 
+                    required 
+                    style={{ colorScheme: dark ? 'dark' : 'light' }}
+                    className={`w-full pl-10 pr-4 py-3.5 rounded-xl outline-none font-bold text-sm transition-all duration-300 ${theme.input}`} 
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="mt-12 pt-8 border-t border-white/5 flex flex-col sm:flex-row justify-end gap-4">
-            <button type="button" onClick={() => navigate('/dashboard/votes')} className={`px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${dark ? 'text-white hover:bg-white/5' : 'text-slate-500 hover:bg-slate-100'}`}>Annuler</button>
-            <button type="submit" disabled={saving || uploadingImage} className="flex items-center justify-center gap-3 px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white bg-gradient-to-r from-[#6c47ff] to-[#8b6bff] shadow-[0_15px_40px_-5px_rgba(108,71,255,0.4)] hover:scale-[1.02] active:scale-95 disabled:opacity-50 transition-all">
-              {saving ? <Spinner size="sm" color="white" /> : <Save size={16} />}
-              {saving ? 'Sauvegarde...' : 'Enregistrer les modifications'}
+          {/* ACTIONS */}
+          <div className="pt-6 flex flex-col-reverse sm:flex-row justify-end gap-4">
+            <button 
+              type="button" 
+              onClick={() => navigate('/dashboard/votes')} 
+              className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all duration-300 ${dark ? 'text-slate-300 hover:text-white hover:bg-white/5' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              Annuler
+            </button>
+            <button 
+              type="submit" 
+              disabled={saving || uploadingImage} 
+              className="group relative flex items-center justify-center gap-3 px-10 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest text-white overflow-hidden shadow-[0_15px_40px_-5px_rgba(108,71,255,0.5)] hover:shadow-[0_20px_50px_-5px_rgba(108,71,255,0.7)] hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:pointer-events-none transition-all duration-300"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-[#6c47ff] via-[#8b6bff] to-[#00d4aa] transition-transform duration-500 group-hover:scale-110" />
+              <div className="relative flex items-center justify-center gap-2">
+                {saving ? <Spinner size="sm" color="white" /> : <Save size={16} />}
+                {saving ? 'Sauvegarde...' : 'Enregistrer'}
+              </div>
             </button>
           </div>
+
         </form>
       </div>
     </div>

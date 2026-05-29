@@ -14,6 +14,20 @@ const CATEGORIES = [
   { value: "autre", label: "Autre", desc: "Catégorie personnalisée." },
 ];
 
+// ✅ FONCTION DE GÉNÉRATION DE SLUG (URL propre et unique)
+const generateSlug = (titre) => {
+  const baseSlug = titre
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Supprime les accents
+    .replace(/[^a-z0-9]+/g, "-")     // Remplace les espaces par des tirets
+    .replace(/(^-|-$)+/g, "");       // Nettoie les bords
+
+  // Ajoute un identifiant court pour garantir l'unicité
+  const uniqueId = Math.random().toString(36).substring(2, 6);
+  return `${baseSlug}-${uniqueId}`;
+};
+
 export default function OrgVoteCreatePage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -27,7 +41,6 @@ export default function OrgVoteCreatePage() {
   const [endAt, setEndAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // CORRIGÉ: séparé en 2 useEffect
   useEffect(() => {
     const t = setTimeout(() => setIsSecuring(false), 400);
     return () => clearTimeout(t);
@@ -71,10 +84,14 @@ export default function OrgVoteCreatePage() {
         imageUrl = data.publicUrl;
       }
 
+      // ✅ Génération du slug unique à partir du titre
+      const voteSlug = generateSlug(title);
+
       const { data: vote, error } = await supabase
-     .from("votes")
-     .insert({
+      .from("votes")
+      .insert({
           title: title.trim(),
+          slug: voteSlug, // ✅ Insertion du slug
           description: description.trim() || null,
           category,
           end_at: endAt,
@@ -82,8 +99,8 @@ export default function OrgVoteCreatePage() {
           organizer_id: user.id,
           status: "draft"
         })
-     .select()
-     .single();
+      .select()
+      .single();
 
       if (error) throw new Error(error.message);
       return vote;

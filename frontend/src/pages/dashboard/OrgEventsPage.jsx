@@ -6,7 +6,7 @@ import CreateEventModal from './CreateEventModal';
 import Spinner from '../../components/ui/Spinner';
 import {
   Plus, Calendar, ToggleLeft, ToggleRight, Sparkles,
-  Ticket, MapPin, ImageIcon, Edit3, ArrowRight, Pointer
+  Ticket, MapPin, ImageIcon, Edit3, ArrowRight, Pointer, ExternalLink
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -56,7 +56,6 @@ export default function OrgEventsPage() {
         </div>
 
         <div className="flex flex-col gap-4">
-          {/* Aides masquées sur mobile (hidden md:flex) */}
           <div className="hidden md:flex justify-end gap-4">
              <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-emerald-500/5 border-emerald-200/50 dark:border-emerald-800/30">
                <Ticket size={14} className="text-emerald-500" />
@@ -96,6 +95,16 @@ export default function OrgEventsPage() {
                     {event.vote_actif ? <ToggleRight size={12} /> : <ToggleLeft size={12} />} Votes
                   </button>
                   <Link to="/dashboard/tickets" state={{ eventId: event.id }} className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 text-[10px] font-bold flex items-center gap-1"><Ticket size={12} /> Tickets</Link>
+                  
+                  {/* ✅ BOUTON POUR VOIR L'URL PROFESSIONNELLE */}
+                  <Link 
+                    to={`/events/${event.slug || event.id}`} 
+                    target="_blank"
+                    className="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 text-[10px] font-bold flex items-center gap-1 ml-auto"
+                  >
+                    <ExternalLink size={12} /> Voir la page
+                  </Link>
+
                 </div>
               </div>
             </div>

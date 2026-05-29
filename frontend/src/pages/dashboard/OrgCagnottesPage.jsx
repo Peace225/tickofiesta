@@ -1,22 +1,38 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { supabase } from '../../config/supabaseClient';
+import { Link } from 'react-router-dom';
 import {
   PiggyBank, Plus, Clock, CheckCircle, XCircle,
   Target, Heart, Wallet,
-  Upload, X, Image as ImageIcon, Loader2
+  Upload, X, Image as ImageIcon, Loader2,
+  Edit2, Trash2, ExternalLink
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+// ✅ FONCTION DE GÉNÉRATION DE SLUG (URL propre et unique)
+const generateSlug = (titre) => {
+  const baseSlug = titre
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+
+  const uniqueId = Math.random().toString(36).substring(2, 6);
+  return `${baseSlug}-${uniqueId}`;
+};
 
 export default function OrgCagnottesPage() {
   const { dark } = useSelector(s => s.theme);
   const user = useSelector(s => s.auth.user);
   const fileRef = useRef(null);
 
-  const [form, setForm] = useState({ titre: '', description: '', objectif_montant: '', date_fin: '' });
+  const [form, setForm] = useState({ titre: '', description: '', objectif_montant: '', date_fin: '', image_url: '' });
   const [myCagnottes, setMyCagnottes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
 
@@ -38,6 +54,42 @@ export default function OrgCagnottesPage() {
     setMyCagnottes(data || []);
   };
 
+  const resetForm = () => {
+    setForm({ titre: '', description: '', objectif_montant: '', date_fin: '', image_url: '' });
+    setFile(null);
+    setPreview(null);
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const handleEdit = (cagnotte) => {
+    setForm({
+      titre: cagnotte.titre || '',
+      description: cagnotte.description || '',
+      objectif_montant: cagnotte.objectif_montant || '',
+      date_fin: cagnotte.date_fin || '',
+      image_url: cagnotte.image_url || ''
+    });
+    setPreview(cagnotte.image_url || null);
+    setEditingId(cagnotte.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Voulez-vous vraiment supprimer cette cagnotte ?")) return;
+
+    try {
+      const { error } = await supabase.from('cagnottes').delete().eq('id', id);
+      if (error) throw error;
+      toast.success("Cagnotte supprimée !");
+      fetchMine();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur de suppression.");
+    }
+  };
+
   const handleImage = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -53,8 +105,9 @@ export default function OrgCagnottesPage() {
     setLoading(true);
 
     try {
-      let image_url = null;
+      let finalImageUrl = form.image_url;
 
+      // Upload de l'image si un nouveau fichier est sélectionné
       if (file) {
         const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
         const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -74,28 +127,43 @@ export default function OrgCagnottesPage() {
         }
 
         const { data } = supabase.storage.from('cagnottes').getPublicUrl(fileName);
-        image_url = data.publicUrl;
+        finalImageUrl = data.publicUrl;
       }
 
-      const { error } = await supabase.from('cagnottes').insert({
+      const payload = {
         titre: form.titre.trim(),
         description: form.description.trim(),
         objectif_montant: Number(form.objectif_montant),
         date_fin: form.date_fin,
         organisateur_id: user.id,
-        // ✅ Retour à l'état "en_attente" pour exiger la validation de l'admin
-        statut: 'en_attente', 
-        montant_actuel: 0,
-        image_url
-      });
+        image_url: finalImageUrl
+      };
 
-      if (error) throw error;
+      if (editingId) {
+        // Mode Modification : On ne met PAS à jour le slug pour ne pas casser les liens partagés
+        const { error } = await supabase
+          .from('cagnottes')
+          .update(payload)
+          .eq('id', editingId);
 
-      toast.success('Cagnotte soumise pour validation ✨');
-      setForm({ titre: '', description: '', objectif_montant: '', date_fin: '' });
-      setFile(null);
-      setPreview(null);
-      setShowForm(false);
+        if (error) throw error;
+        toast.success('Cagnotte mise à jour ✨');
+      } else {
+        // Mode Création : Génération du slug unique
+        const cagnotteSlug = generateSlug(form.titre);
+
+        const { error } = await supabase.from('cagnottes').insert({
+          ...payload,
+          slug: cagnotteSlug, // ✅ Insertion du slug
+          statut: 'en_attente', 
+          montant_actuel: 0
+        });
+
+        if (error) throw error;
+        toast.success('Cagnotte soumise pour validation ✨');
+      }
+
+      resetForm();
       fetchMine();
     } catch (err) {
       console.error(err);
@@ -119,7 +187,6 @@ export default function OrgCagnottesPage() {
     input: dark ? 'bg-zinc-800/50 border-zinc-700 text-white placeholder-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400',
   };
 
-  // ✅ Configuration des statuts améliorée visuellement
   const statusConfig = {
     'validé': { icon: CheckCircle, text: 'text-emerald-500', bg: 'bg-emerald-500/10', label: 'Validée' },
     'rejeté': { icon: XCircle, text: 'text-red-500', bg: 'bg-red-500/10', label: 'Rejetée' },
@@ -143,8 +210,9 @@ export default function OrgCagnottesPage() {
                   <p className={`text-sm mt-1 ${theme.sub}`}>Soumises à validation admin</p>
                 </div>
               </div>
-              <button onClick={() => setShowForm(!showForm)} className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-black text-sm font-medium flex items-center gap-2 hover:scale-[1.02] transition">
-                <Plus size={16} /> <span className="hidden sm:inline">Nouvelle</span>
+              <button onClick={() => showForm ? resetForm() : setShowForm(true)} className="px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-black text-sm font-medium flex items-center gap-2 hover:scale-[1.02] transition">
+                {showForm ? <X size={16} /> : <Plus size={16} />} 
+                <span className="hidden sm:inline">{showForm ? 'Annuler' : 'Nouvelle'}</span>
               </button>
             </div>
           </div>
@@ -169,11 +237,13 @@ export default function OrgCagnottesPage() {
 
         {/* FORM */}
         {showForm && (
-          <div className="mb-8">
+          <div className="mb-8 animate-fade-in">
             <div className={`rounded-2xl border ${theme.card} p-6`}>
               <div className="flex items-center justify-between mb-5">
-                <h3 className={`font-semibold ${theme.text}`}>Créer une cagnotte</h3>
-                <button type="button" onClick={() => setShowForm(false)} className={`p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/10 ${theme.sub}`}>
+                <h3 className={`font-semibold ${theme.text}`}>
+                  {editingId ? 'Modifier la cagnotte' : 'Créer une cagnotte'}
+                </h3>
+                <button type="button" onClick={resetForm} className={`p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/10 ${theme.sub}`}>
                   <X size={18} />
                 </button>
               </div>
@@ -209,7 +279,7 @@ export default function OrgCagnottesPage() {
                   <textarea required placeholder="Description du projet..." value={form.description} onChange={e => setForm({...form, description: e.target.value })} className={`md:col-span-2 w-full px-4 py-3 rounded-xl border text-sm h-24 resize-none outline-none focus:ring-2 focus:ring-violet-500/20 ${theme.input}`} />
                 </div>
                 <button type="submit" disabled={loading} className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-sky-500 text-white font-medium flex items-center justify-center gap-2 disabled:opacity-50 hover:shadow-lg transition">
-                  {loading ? <><Loader2 size={16} className="animate-spin" /> Upload en cours...</> : <><Upload size={16} /> Soumettre la cagnotte</>}
+                  {loading ? <><Loader2 size={16} className="animate-spin" /> Traitement...</> : <><Upload size={16} /> {editingId ? 'Enregistrer les modifications' : 'Soumettre la cagnotte'}</>}
                 </button>
               </form>
             </div>
@@ -225,19 +295,28 @@ export default function OrgCagnottesPage() {
             return (
               <div key={c.id} className={`p-5 rounded-2xl border ${theme.card} hover:-translate-y-0.5 transition`}>
                 <div className="flex gap-4">
-                  <div className="w-20 h-20 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 flex-shrink-0">
+                  <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-zinc-100 dark:bg-zinc-800 flex-shrink-0 group">
                     {c.image_url ? <img src={c.image_url} className="w-full h-full object-cover" alt={c.titre} /> : <div className="w-full h-full grid place-items-center"><PiggyBank className="text-zinc-400" size={24} /></div>}
+                    
+                    {/* Overlay d'Actions (Modifier / Supprimer) */}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2">
+                      <button onClick={() => handleEdit(c)} className="text-white hover:text-violet-400 transition" title="Modifier">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => handleDelete(c.id)} className="text-white hover:text-red-400 transition" title="Supprimer">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
+                  
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                       <h3 className={`font-semibold truncate ${theme.text}`}>{c.titre}</h3>
                       
-                      {/* ✅ BADGE DE STATUT VISUELLEMENT PREMIUM */}
                       <div className={`flex items-center gap-1.5 flex-shrink-0 px-2.5 py-1 rounded-md ${cfg.bg}`}>
                         <Icon size={14} className={cfg.text} />
                         <span className={`text-[11px] font-bold uppercase tracking-wider ${cfg.text}`}>{cfg.label}</span>
                       </div>
-                      
                     </div>
                     <p className={`text-xs mt-1 line-clamp-1 ${theme.sub}`}>{c.description}</p>
                     
@@ -247,13 +326,24 @@ export default function OrgCagnottesPage() {
                         <span className={theme.sub}>{Number(c.objectif_montant).toLocaleString()} FCFA</span>
                       </div>
                       <div className="h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                        {/* La barre de progression est grisée si la cagnotte n'est pas encore validée */}
                         <div 
                           className={`h-full transition-all ${c.statut === 'validé' ? 'bg-gradient-to-r from-violet-500 to-sky-500' : 'bg-zinc-400 dark:bg-zinc-600'}`} 
                           style={{ width: `${Math.min(progress, 100)}%` }} 
                         />
                       </div>
                     </div>
+
+                    {/* ✅ BOUTON DE PARTAGE (SLUG) */}
+                    <div className="mt-4 flex justify-end border-t border-zinc-100 dark:border-white/5 pt-3">
+                      <Link 
+                        to={`/cagnottes/${c.slug || c.id}`} 
+                        target="_blank"
+                        className="px-3 py-1.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 text-[10px] font-bold flex items-center gap-1.5 hover:bg-sky-500/20 transition-colors"
+                      >
+                        <ExternalLink size={12} /> Voir la page publique
+                      </Link>
+                    </div>
+
                   </div>
                 </div>
               </div>

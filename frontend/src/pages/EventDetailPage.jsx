@@ -3,15 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { supabase } from '../config/supabaseClient';
 import Spinner from '../components/ui/Spinner';
-import { 
-  MapPin, Minus, Plus, ArrowLeft, Share2, Trophy, 
+import {
+  MapPin, Minus, Plus, ArrowLeft, Share2, Trophy,
   Store, PiggyBank, Users, Calendar, Clock, AlertCircle, ArrowRight,
   ShieldCheck, Mail, Phone, Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function EventDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams(); // id peut être un slug OU un uuid maintenant
   const navigate = useNavigate();
   const { dark } = useSelector((s) => s.theme);
 
@@ -31,48 +31,54 @@ export default function EventDetailPage() {
     return data.publicUrl;
   };
 
-  useEffect(() => {
+ useEffect(() => {
     const fetchEventData = async () => {
       if (!id) return;
       try {
         setLoading(true);
+
+        // 1. Déterminer si l'ID est un UUID valide (format standard 8-4-4-4-12)
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+        // 2. Construire la requête de manière sélective
+        let query = supabase.from('events').select('*, profiles:organisateur_id(*)');
         
-        // 1. On récupère d'abord l'événement (C'est le plus important)
-        const { data: eventData, error: eventErr } = await supabase
-          .from('events')
-          .select('*, profiles:organisateur_id(*)')
-          .eq('id', id)
-          .single();
+        if (isUuid) {
+          query = query.eq('id', id);
+        } else {
+          query = query.eq('slug', id);
+        }
 
-        if (eventErr) throw eventErr;
+        const { data: eventData, error: eventErr } = await query.single();
+
+        if (eventErr || !eventData) throw new Error("Événement introuvable");
+        
         setEvent(eventData);
+        const eventId = eventData.id;
 
-        // 2. On récupère les Tables qui ont bien la colonne 'event_id'
-        const [ticketsRes, standsRes] = await Promise.all([
-          supabase.from('tarifs').select('*').eq('event_id', id).order('prix', { ascending: true }),
-          supabase.from('stands').select('*').eq('event_id', id)
+        // 3. Récupération des ressources liées
+        const [ticketsRes, standsRes, votesRes, cagnottesRes] = await Promise.all([
+          supabase.from('tarifs').select('*').eq('event_id', eventId).order('prix', { ascending: true }),
+          supabase.from('stands').select('*').eq('event_id', eventId),
+          supabase.from('votes').select('*').eq('event_id', eventId),
+          supabase.from('cagnottes').select('*').eq('event_id', eventId)
         ]);
         
         setTickets(ticketsRes.data || []);
         setStands(standsRes.data || []);
-
-        // 3. On récupère les Votes et Cagnottes de manière SÉCURISÉE 
-        // (Si la colonne event_id n'existe pas encore, ça ne fera plus planter la page)
-        const { data: votesData, error: votesErr } = await supabase.from('votes').select('*').eq('event_id', id);
-        if (!votesErr) setVotesList(votesData || []);
-
-        const { data: cagnotteData, error: cagnotteErr } = await supabase.from('cagnottes').select('*').eq('event_id', id);
-        if (!cagnotteErr) setCagnottes(cagnotteData || []);
+        setVotesList(votesRes.data || []);
+        setCagnottes(cagnottesRes.data || []);
 
       } catch (err) {
-        console.error("Erreur critique lors du chargement:", err);
-        toast.error("Erreur lors du chargement de l'événement");
+        console.error("Erreur critique:", err);
+        toast.error("Impossible de charger l'événement");
+        navigate('/');
       } finally {
         setLoading(false);
       }
     };
     fetchEventData();
-  }, [id]);
+  }, [id, navigate]);
 
   const setQty = (ticketId, delta) => setQuantities(prev => ({...prev, [ticketId]: Math.max(0, (prev[ticketId] || 0) + delta) }));
 
@@ -81,7 +87,7 @@ export default function EventDetailPage() {
       navigator.share({ title: event.titre, url: window.location.href }).catch(console.error);
     } else {
       navigator.clipboard.writeText(window.location.href);
-      toast.success("Lien copié !");
+      toast.success("Lien copié!");
     }
   };
 
@@ -90,38 +96,38 @@ export default function EventDetailPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
-      
+
       const selectedTickets = tickets.filter(t => (quantities[t.id] || 0) > 0).map(t => ({
-          ticket_type_id: t.id, 
-          quantity: quantities[t.id], 
+          ticket_type_id: t.id,
+          quantity: quantities[t.id],
           unit_price: t.prix
       }));
 
       if (total === 0) {
         const { data, error } = await supabase.functions.invoke('init-geniuspay', {
-          body: { event_id: id, user_id: user.id, tickets: selectedTickets, total_amount: 0 }
+          body: { event_id: event.id, user_id: user.id, tickets: selectedTickets, total_amount: 0 } // mise à jour: event.id
         });
         if (error) throw error;
-        toast.success("Réservation gratuite validée avec succès !");
+        toast.success("Réservation gratuite validée avec succès!");
         setPaying(false);
         return;
       }
-      
+
       const { data, error } = await supabase.functions.invoke('init-geniuspay', {
-        body: { event_id: id, user_id: user.id, tickets: selectedTickets, total_amount: total }
+        body: { event_id: event.id, user_id: user.id, tickets: selectedTickets, total_amount: total } // mise à jour: event.id
       });
-      
+
       if (error) throw error;
       if (data?.payment_url) {
         window.location.href = data.payment_url;
       } else {
-        toast.success("Réservation validée !");
+        toast.success("Réservation validée!");
       }
-    } catch (err) { 
+    } catch (err) {
       console.error("Erreur détaillée de la fonction backend :", err);
-      toast.error("Le serveur a rencontré une erreur"); 
-    } finally { 
-      setPaying(false); 
+      toast.error("Le serveur a rencontré une erreur");
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -138,8 +144,8 @@ export default function EventDetailPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!event) return <div className="text-center py-20">Événement introuvable.</div>;
 
-  const organizerProfile = event.profiles 
-    ? (Array.isArray(event.profiles) ? event.profiles[0] : event.profiles)
+  const organizerProfile = event.profiles
+   ? (Array.isArray(event.profiles)? event.profiles[0] : event.profiles)
     : null;
 
   const organizerName = organizerProfile?.nom || organizerProfile?.full_name || "Organisateur de l'événement";
@@ -147,8 +153,7 @@ export default function EventDetailPage() {
   const organizerPhone = organizerProfile?.telephone || organizerProfile?.phone || organizerProfile?.phone_number || "Non renseigné";
 
   return (
-    <div className={`min-h-screen ${dark ? 'bg-[#06060c]' : 'bg-[#f4f7fd]'} pb-20`}>
-      
+    <div className={`min-h-screen ${dark? 'bg-[#06060c]' : 'bg-[#f4f7fd]'} pb-20`}>
       <div className="relative w-full bg-[#030712] overflow-hidden py-6 lg:py-8 border-b border-white/5">
         <div className="absolute inset-0 bg-[radial-gradient(circle_800px_at_100%_0%,rgba(0,184,255,0.18),transparent_70%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_700px_at_0%_100%,rgba(16,185,129,0.08),transparent_70%)]" />
@@ -213,7 +218,6 @@ export default function EventDetailPage() {
           </div>
         </div>
       </div>
-
       <main className="max-w-7xl mx-auto px-6 mt-10 grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-10 items-start">
         <section className="space-y-8">
           <div className="bg-white dark:bg-slate-900 p-8 md:p-10 rounded-[2.5rem] border border-slate-100 dark:border-slate-800/60 shadow-xl relative overflow-hidden">
@@ -371,7 +375,7 @@ export default function EventDetailPage() {
             <div className="flex items-center gap-3 mb-5"><div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.15)]"><PiggyBank size={20} strokeWidth={2.5} /></div><div><h4 className="font-black text-lg tracking-tight">Cagnottes Solidaires</h4><p className="text-[11px] text-slate-400 font-medium">Soutenez le financement du projet</p></div></div>
             {cagnottes.length > 0 ? (
               <div className="space-y-4">
-                {/* CORRECTION : Utilisation de montant_actuel et objectif_montant */}
+                
                 {cagnottes.map(cg => {
                   const pct = Math.min(100, Math.round((cg.montant_actuel / cg.objectif_montant) * 100)) || 0;
                   return (

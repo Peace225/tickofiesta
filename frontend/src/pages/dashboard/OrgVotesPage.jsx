@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
-import { Vote, Plus, Sparkles, TrendingUp, Users, Zap, Edit3, Trash2, Calendar, Activity } from 'lucide-react';
+import { 
+  Vote, Plus, Sparkles, TrendingUp, Users, Zap, 
+  Edit3, Trash2, Calendar, Activity, ExternalLink 
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function OrgVotesPage() {
@@ -179,14 +182,24 @@ export default function OrgVotesPage() {
                   </div>
                 </div>
 
-                {/* Actions (Gérer / Éditer / Supprimer) */}
+                {/* Actions (Gérer / Public / Supprimer) */}
                 <div className="flex gap-2 mt-5">
                   <button 
                     onClick={() => navigate(`/dashboard/votes/${v.id}/edit`)} 
-                    className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-[#6c47ff]/10 text-[#6c47ff] hover:bg-[#6c47ff] hover:text-white text-xs font-bold transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-[#6c47ff]/10 text-[#6c47ff] hover:bg-[#6c47ff] hover:text-white text-[11px] font-black uppercase tracking-wider transition-colors"
                   >
                     <Edit3 size={14} /> Gérer
                   </button>
+                  
+                  {/* ✅ BOUTON LIEN PUBLIC AVEC SLUG */}
+                  <Link 
+                    to={`/votes/${v.slug || v.id}`} 
+                    target="_blank"
+                    className="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500 hover:text-white text-[11px] font-black uppercase tracking-wider transition-colors"
+                  >
+                    <ExternalLink size={14} /> Public
+                  </Link>
+
                   <button 
                     onClick={(e) => handleDelete(e, v.id)} 
                     className="p-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors"

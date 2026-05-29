@@ -4,7 +4,7 @@ import { supabase } from "../../config/supabaseClient";
 import { 
   Calendar, Tent, Trophy, Heart, Shield, Music, Palette, 
   GraduationCap, Wine, Map, Dumbbell, Atom, Church, Utensils, 
-  Briefcase, LayoutGrid, ChevronLeft, ChevronRight, Share2, MapPin, Clock 
+  Briefcase, LayoutGrid, ChevronLeft, ChevronRight, Share2, MapPin, Clock, User 
 } from "lucide-react";
 import Spinner from "../ui/Spinner";
 import toast from "react-hot-toast";
@@ -40,10 +40,11 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
       const { data: catsData } = await supabase.from('categories').select('*').eq('is_active', true);
       setCategories([{ id: null, nom: "Toutes", slug: "toutes", couleur: "#64748b" }, ...(catsData || [])]);
 
+      // Note : Assurez-vous que la colonne 'organisateur_nom' existe dans votre table events
       const { data: resEvents } = await supabase
         .from('events')
         .select('*')
-        .eq('statut', 'validé')
+        .eq('statut', 'validé') // Filtrage initial
         .gte('date', now)
         .order('date', { ascending: true });
 
@@ -76,7 +77,8 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
 
   const handleShare = (e, item) => {
     e.preventDefault();
-    const url = `${window.location.origin}/events/${item.id}`;
+    const eventIdentifier = item.slug || item.id;
+    const url = `${window.location.origin}/events/${eventIdentifier}`;
     if (navigator.share) {
       navigator.share({ title: item.titre, url }).catch(console.error);
     } else {
@@ -128,7 +130,15 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
               {displayedData.length > 0 ? displayedData.map((item) => (
                 <div key={item.id} className={`rounded-2xl border overflow-hidden ${dark ? "bg-[#0f0e1a] border-white/5" : "bg-white border-gray-100 shadow-lg"}`}>
                   <div className="relative aspect-[16/11] overflow-hidden">
-                    <img src={getImageUrl(item.image)} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" alt={item.titre} />
+                    <img src={getImageUrl(item.image_url || item.image)} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" alt={item.titre} />
+                    
+                    {/* Indicateur En Cours */}
+                    {item.statut === 'en cours' && (
+                      <div className="absolute top-2 left-2 px-2 py-0.5 bg-purple-600 text-white text-[9px] font-black uppercase rounded-md shadow-sm z-10">
+                        En cours
+                      </div>
+                    )}
+
                     <button onClick={(e) => handleShare(e, item)} className="absolute top-2 right-2 p-1.5 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-black/70 transition-colors">
                       <Share2 size={12} />
                     </button>
@@ -137,6 +147,12 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
                   <div className="p-3">
                     <h3 className={`font-black text-[11px] md:text-sm uppercase mb-2 truncate ${dark ? 'text-white' : 'text-slate-900'}`}>{item.titre}</h3>
                     
+                    {/* Publié par */}
+                    <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold mb-3">
+                      <User size={10} />
+                      <span>Publié par {item.organisateur_nom || 'Admin'}</span>
+                    </div>
+
                     <div className="space-y-1.5 mb-4">
                       <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-500">
                         <Calendar size={10} />
@@ -156,7 +172,7 @@ export default function EventsSection({ eventsRef, eventsInView, dark, searchQue
                       </span>
                     </div>
 
-                    <Link to={`/events/${item.id}`} className="block w-full py-2 rounded-lg text-center text-[10px] font-black uppercase bg-rose-600 text-white hover:bg-rose-700 transition-colors">
+                    <Link to={`/events/${item.slug || item.id}`} className="block w-full py-2 rounded-lg text-center text-[10px] font-black uppercase bg-rose-600 text-white hover:bg-rose-700 transition-colors">
                       Réserver
                     </Link>
                   </div>

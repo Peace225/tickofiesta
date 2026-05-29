@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { supabase } from '../../config/supabaseClient';
 import { 
   ArrowLeft, Save, Upload, Calendar, FileText, 
-  Type, ListFilter, ImageIcon, Sparkles, Settings2 
+  Type, ListFilter, ImageIcon, Sparkles, Settings2, ExternalLink 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
@@ -18,8 +18,9 @@ export default function OrgVoteEdit() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [voteSlug, setVoteSlug] = useState('');
   
-  // État local (en français)
+  // État local
   const [formData, setFormData] = useState({
     titre: '',
     description: '',
@@ -45,7 +46,7 @@ export default function OrgVoteEdit() {
         .from('votes')
         .select('*')
         .eq('id', id)
-        .eq('organizer_id', user.id) // ✅ Basé sur l'image b_9.PNG
+        .eq('organizer_id', user.id) 
         .single();
 
       if (error) throw error;
@@ -55,16 +56,17 @@ export default function OrgVoteEdit() {
         return;
       }
 
-      // ✅ Lecture des colonnes en fonction de b_9.PNG (category, title)
       const isKnownCategory = CATEGORIES.some(c => c.value === data.category);
       const dateFormatee = data.date_fin ? new Date(data.date_fin).toISOString().slice(0, 16) : '';
 
+      setVoteSlug(data.slug || data.id); // ✅ Récupération du slug pour le bouton de lien
+
       setFormData({
-        titre: data.title || '', // Map de "title" (BDD) vers "titre" (React)
+        titre: data.title || '', 
         description: data.description || '',
         image_url: data.image_url || '',
         date_fin: dateFormatee,
-        categorie: isKnownCategory ? (data.category || 'autre') : 'autre', // Map de "category"
+        categorie: isKnownCategory ? (data.category || 'autre') : 'autre', 
         categorie_autre: isKnownCategory ? '' : (data.category || ''),
       });
 
@@ -129,14 +131,15 @@ export default function OrgVoteEdit() {
       const { error } = await supabase
         .from('votes')
         .update({
-          title: formData.titre, // ✅ Écriture vers "title" (BDD)
+          title: formData.titre, 
           description: formData.description,
           image_url: formData.image_url,
           date_fin: new Date(formData.date_fin).toISOString(),
-          category: finalCategorie, // ✅ Écriture vers "category" (BDD)
+          category: finalCategorie, 
+          // 🛑 Note : On NE met PAS à jour le slug ici pour ne pas briser les liens partagés
         })
         .eq('id', id)
-        .eq('organizer_id', user.id); // ✅ Filtre avec "organizer_id" (BDD)
+        .eq('organizer_id', user.id); 
 
       if (error) {
         console.error("❌ ERREUR SUPABASE:", error);
@@ -177,23 +180,35 @@ export default function OrgVoteEdit() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10">
         
-        {/* HEADER */}
-        <div className="flex items-center gap-6 mb-10">
-          <button 
-            onClick={() => navigate('/dashboard/votes')} 
-            className={`group w-12 h-12 rounded-2xl flex items-center justify-center border transition-all duration-300 hover:-translate-x-1 ${dark ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-white border-slate-200 text-slate-600 hover:shadow-lg'}`}
-          >
-            <ArrowLeft size={20} className="group-hover:text-[#6c47ff] transition-colors" />
-          </button>
-          <div>
-            <h1 className={`text-3xl md:text-4xl font-black tracking-tight ${theme.text}`}>Paramètres de l'Événement</h1>
-            <p className={`text-[11px] font-bold uppercase tracking-[0.2em] mt-1 text-[#6c47ff]`}>Mode Édition</p>
+        {/* HEADER avec bouton de vue publique */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={() => navigate('/dashboard/votes')} 
+              className={`group w-12 h-12 rounded-2xl flex items-center justify-center border transition-all duration-300 hover:-translate-x-1 ${dark ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-white border-slate-200 text-slate-600 hover:shadow-lg'}`}
+            >
+              <ArrowLeft size={20} className="group-hover:text-[#6c47ff] transition-colors" />
+            </button>
+            <div>
+              <h1 className={`text-3xl md:text-4xl font-black tracking-tight ${theme.text}`}>Paramètres du Concours</h1>
+              <p className={`text-[11px] font-bold uppercase tracking-[0.2em] mt-1 text-[#6c47ff]`}>Mode Édition</p>
+            </div>
           </div>
+          
+          {voteSlug && (
+            <Link 
+              to={`/votes/${voteSlug}`} 
+              target="_blank"
+              className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 ${dark ? 'bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 border border-sky-500/20' : 'bg-sky-50 text-sky-600 hover:bg-sky-100 border border-sky-100'}`}
+            >
+              <ExternalLink size={16} /> Voir la page
+            </Link>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           
-          {/* SECTION 1 : VISUEL (Mise en avant du côté événementiel) */}
+          {/* SECTION 1 : VISUEL */}
           <div className={`rounded-3xl border p-6 md:p-8 transition-all ${theme.card}`}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 rounded-lg bg-[#f5a623]/10 flex items-center justify-center text-[#f5a623]">

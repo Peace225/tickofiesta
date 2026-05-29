@@ -12,6 +12,20 @@ const formatLocalDatetime = (dateStr) => {
   return new Date(d - tzOffset).toISOString().slice(0, 16);
 };
 
+// ✅ FONCTION DE GÉNÉRATION DE SLUG (URL propre et unique)
+const generateSlug = (titre) => {
+  const baseSlug = titre
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+    .replace(/[^a-z0-9]+/g, "-")     // Remplace les espaces par des tirets
+    .replace(/(^-|-$)+/g, "");       // Nettoie les bords
+
+  // Ajout d'un identifiant court pour garantir l'unicité
+  const uniqueId = Math.random().toString(36).substring(2, 6);
+  return `${baseSlug}-${uniqueId}`;
+};
+
 export default function CreateEventModal({ show, onClose, onSuccess, eventToEdit = null }) {
   const { dark } = useSelector((s) => s.theme);
   const { user } = useSelector((s) => s.auth);
@@ -105,7 +119,7 @@ export default function CreateEventModal({ show, onClose, onSuccess, eventToEdit
         // --- MODE ÉDITION ---
         const { error: updateError } = await supabase
           .from('events')
-          .update(payload)
+          .update(payload) // On n'inclut pas le slug ici pour ne pas casser l'ancienne URL
           .eq('id', eventToEdit.id);
 
         if (updateError) throw updateError;
@@ -113,10 +127,13 @@ export default function CreateEventModal({ show, onClose, onSuccess, eventToEdit
 
       } else {
         // --- MODE CRÉATION ---
+        const eventSlug = generateSlug(form.titre); // ✅ Génération du slug
+
         const { error: insertError } = await supabase
           .from('events')
           .insert([{
             ...payload,
+            slug: eventSlug, // ✅ Ajout du slug uniquement à la création
             organisateur_id: user.id,
             statut: 'en_attente',
             vote_actif: false

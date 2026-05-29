@@ -15,6 +15,20 @@ const CATEGORIES = [
   "Sport", "Festival", "Business", "Concours", "Autre"
 ];
 
+// Fonction pour générer le slug (en dehors du composant pour éviter d'être recréée)
+const generateSlug = (titre) => {
+  const baseSlug = titre
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+
+  // Ajoute 4 caractères aléatoires pour garantir l'unicité
+  const uniqueId = Math.random().toString(36).substring(2, 6);
+  return `${baseSlug}-${uniqueId}`;
+};
+
 export default function OrgEventCreatePage() {
   const navigate = useNavigate();
   const { user } = useSelector((s) => s.auth);
@@ -30,7 +44,7 @@ export default function OrgEventCreatePage() {
     date: '',
     heure: '',
     lieu: '',
-    categorie: '', // Remplacé categorie_id par categorie
+    categorie: '', 
   });
 
   // Mise à jour de la structure des tarifs pour correspondre à Supabase
@@ -77,20 +91,30 @@ export default function OrgEventCreatePage() {
         .upload(filePath, imageFile);
 
       if (uploadError) throw uploadError;
+      
+      // Obtenir l'URL publique de l'image (si vous l'utilisez directement)
+      const { data: { publicUrl } } = supabase.storage.from('events').getPublicUrl(filePath);
 
-      // 2. Création de l'événement (avec la catégorie en texte)
+      // Génération du Slug
+      const eventSlug = generateSlug(formData.titre);
+
+      // 2. Création de l'événement (avec la catégorie en texte et le slug)
       const { data: eventData, error: eventError } = await supabase
         .from('events')
         .insert([{
           ...formData,
+          slug: eventSlug, // 👈 Ajout du slug ici
           organisateur_id: userId,
-          image_url: filePath,
+          image_url: publicUrl, // On stocke l'URL publique si c'est ce que la table attend
           statut: 'en_attente'
         }])
         .select()
         .single();
 
-      if (eventError) throw eventError;
+      if (eventError) {
+        console.error("Erreur lors de la création de l'événement:", eventError);
+        throw eventError;
+      }
 
       // 3. Création des tarifs (avec la bonne structure Supabase)
       const tarifsToInsert = tarifs.map(t => ({

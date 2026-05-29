@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { 
   Plus, Trash2, ArrowLeft, Users, 
   Ticket, Star, MapPin, Calendar, 
-  Settings2, Zap, ShieldAlert
+  Settings2, Zap, ShieldAlert, ExternalLink
 } from 'lucide-react';
 
 export default function TicketsManager() {
@@ -182,6 +182,17 @@ export default function TicketsManager() {
               </span>
             </div>
           </div>
+
+          {/* ✅ BOUTON LIEN PUBLIC AVEC SLUG */}
+          {event && (
+            <Link 
+              to={`/events/${event.slug || event.id}`} 
+              target="_blank"
+              className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 ${dark ? 'bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 border border-sky-500/20' : 'bg-sky-50 text-sky-600 hover:bg-sky-100 border border-sky-100'}`}
+            >
+              <ExternalLink size={16} /> Voir la page
+            </Link>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

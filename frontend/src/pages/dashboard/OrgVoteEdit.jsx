@@ -19,6 +19,7 @@ export default function OrgVoteEdit() {
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   
+  // État local (en français)
   const [formData, setFormData] = useState({
     titre: '',
     description: '',
@@ -44,7 +45,7 @@ export default function OrgVoteEdit() {
         .from('votes')
         .select('*')
         .eq('id', id)
-        .eq('organizer_id', user.id) // CORRIGÉ : organizer_id au lieu de organisateur_id
+        .eq('organizer_id', user.id) // ✅ Basé sur l'image b_9.PNG
         .single();
 
       if (error) throw error;
@@ -54,16 +55,17 @@ export default function OrgVoteEdit() {
         return;
       }
 
-      const isKnownCategory = CATEGORIES.some(c => c.value === data.categorie);
+      // ✅ Lecture des colonnes en fonction de b_9.PNG (category, title)
+      const isKnownCategory = CATEGORIES.some(c => c.value === data.category);
       const dateFormatee = data.date_fin ? new Date(data.date_fin).toISOString().slice(0, 16) : '';
 
       setFormData({
-        titre: data.titre || '',
+        titre: data.title || '', // Map de "title" (BDD) vers "titre" (React)
         description: data.description || '',
         image_url: data.image_url || '',
         date_fin: dateFormatee,
-        categorie: isKnownCategory ? (data.categorie || 'autre') : 'autre',
-        categorie_autre: isKnownCategory ? '' : (data.categorie || ''),
+        categorie: isKnownCategory ? (data.category || 'autre') : 'autre', // Map de "category"
+        categorie_autre: isKnownCategory ? '' : (data.category || ''),
       });
 
     } catch (error) {
@@ -127,21 +129,24 @@ export default function OrgVoteEdit() {
       const { error } = await supabase
         .from('votes')
         .update({
-          titre: formData.titre,
+          title: formData.titre, // ✅ Écriture vers "title" (BDD)
           description: formData.description,
           image_url: formData.image_url,
           date_fin: new Date(formData.date_fin).toISOString(),
-          categorie: finalCategorie,
+          category: finalCategorie, // ✅ Écriture vers "category" (BDD)
         })
         .eq('id', id)
-        .eq('organizer_id', user.id); // CORRIGÉ
+        .eq('organizer_id', user.id); // ✅ Filtre avec "organizer_id" (BDD)
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ ERREUR SUPABASE:", error);
+        throw error;
+      }
 
       toast.success('Modifications enregistrées !');
       navigate('/dashboard/votes'); 
     } catch (error) {
-      toast.error("Erreur lors de la sauvegarde");
+      toast.error(`Erreur de sauvegarde : ${error.message || "inconnue"}`);
     } finally {
       setSaving(false);
     }

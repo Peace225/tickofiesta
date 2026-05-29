@@ -7,7 +7,7 @@ import { supabase } from '../../config/supabaseClient';
 import {
   Sun, Moon, LogOut, MapPin, 
   Facebook, Instagram, Store, UserCircle, 
-  Ticket, ShoppingCart, CheckSquare, CreditCard, Settings
+  Ticket, ShoppingCart, LayoutDashboard, Shield
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -69,6 +69,7 @@ export default function Navbar() {
     navigate('/');
   };
 
+  // On ne rend pas la Navbar client sur les espaces d'administration
   const isAdminArea = location.pathname.startsWith('/admin') || location.pathname.startsWith('/dashboard');
   if (isAdminArea) return null;
 
@@ -104,6 +105,7 @@ export default function Navbar() {
 
             <div className="flex items-center justify-end gap-2 md:gap-4">
               
+              {/* Le panier ne s'affiche que pour les clients */}
               {user && role === 'client' && (
                 <Link to="/cart" className={`relative p-2 rounded-xl transition-all ${dark ? 'bg-white/5' : 'bg-slate-100'}`}>
                   <ShoppingCart size={18} className={animate ? 'animate-bounce' : ''} />
@@ -136,13 +138,37 @@ export default function Navbar() {
                           <p className="text-[10px] truncate opacity-60">{user.email}</p>
                         </div>
                         <div className="p-1.5">
-                          <Link to="/mes-billets" onClick={() => setUserMenuOpen(false)} className="block px-3 py-2 text-xs font-bold hover:bg-slate-100 rounded-lg">Mes Billets</Link>
-                          <button onClick={handleLogout} className="w-full text-left px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg">Déconnexion</button>
+                          
+                          {/* ✅ LIEN CONDITIONNEL POUR L'ADMINISTRATEUR */}
+                          {role === 'admin' && (
+                            <div className="pb-1 border-b mb-1 border-slate-100 dark:border-white/5">
+                              <Link to="/admin" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-black text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg">
+                                <Shield size={14} /> Espace Admin
+                              </Link>
+                            </div>
+                          )}
+
+                          {/* ✅ LIEN CONDITIONNEL POUR L'ORGANISATEUR */}
+                          {role === 'organisateur' && (
+                            <div className="pb-1 border-b mb-1 border-slate-100 dark:border-white/5">
+                              <Link to="/dashboard" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-black text-[#6c47ff] hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg">
+                                <LayoutDashboard size={14} /> Dashboard
+                              </Link>
+                            </div>
+                          )}
+
+                          <Link to="/mes-billets" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-bold hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg">
+                            <Ticket size={14} /> Mes Billets
+                          </Link>
+                          
+                          <button onClick={handleLogout} className="w-full text-left flex items-center gap-2 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                            <LogOut size={14} /> Déconnexion
+                          </button>
                         </div>
                       </>
                     ) : (
                       <div className="p-2">
-                        <Link to="/login" className="block w-full py-2 text-center text-xs font-black uppercase bg-slate-100 rounded-xl mb-1">Connexion</Link>
+                        <Link to="/login" className="block w-full py-2 text-center text-xs font-black uppercase bg-slate-100 dark:bg-slate-800 rounded-xl mb-1">Connexion</Link>
                         <Link to="/register" className="block w-full py-2 text-center text-xs font-black uppercase bg-[#6c47ff] text-white rounded-xl">S'inscrire</Link>
                       </div>
                     )}

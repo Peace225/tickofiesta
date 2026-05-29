@@ -16,6 +16,7 @@
     "@supabase/supabase-js": "^2.105.3",
     "@yudiel/react-qr-scanner": "^2.6.0",
     "axios": "^1.16.0",
+    "driver.js": "^1.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.544.0",

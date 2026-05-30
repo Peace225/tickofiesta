@@ -10,7 +10,6 @@ export default function Validations() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Liste globale des statuts considérés comme "traités/validés"
   const VALIDATED_STATUSES = ['occupé', 'réservé', 'validé', 'actif', 'confirmé', 'approuvé'];
 
   const fetchData = useCallback(async () => {
@@ -18,7 +17,7 @@ export default function Validations() {
     const { data: results, error } = await supabase.from(activeTab).select('*');
     
     if (error) {
-      toast.error("Erreur de chargement");
+      toast.error("Erreur de chargement des données");
       console.error("Erreur Fetch:", error);
     } else {
       const filtered = (results || []).filter(item => {
@@ -38,14 +37,9 @@ export default function Validations() {
   const handleValidate = async (item) => {
     if (!item?.id) return false;
     
-    // ✅ CORRECTION : Attribution dynamique du statut selon le type d'élément
-    let targetStatus = 'validé'; // Par défaut pour Événements et Cagnottes
-    
-    if (activeTab === 'stands') {
-      targetStatus = 'occupé'; // Pour respecter la contrainte stands_statut_check
-    } else if (activeTab === 'votes') {
-      targetStatus = 'actif'; // Souvent utilisé pour activer les compétitions
-    }
+    let targetStatus = 'validé';
+    if (activeTab === 'stands') targetStatus = 'occupé';
+    else if (activeTab === 'votes') targetStatus = 'actif';
 
     const { data: updatedData, error } = await supabase
       .from(activeTab)
@@ -59,25 +53,30 @@ export default function Validations() {
       return false;
     }
     
-    if (updatedData) {
-      toast.success("Élément validé et publié avec succès !");
-      setData(prev => prev.filter(i => i.id !== item.id));
-      return true;
-    }
-    return false;
+    toast.success("Élément validé avec succès !");
+    setData(prev => prev.filter(i => i.id !== item.id));
+    return true;
   };
 
   const handleDelete = async (item) => {
     if (!item?.id) return false;
     if (!window.confirm("Supprimer définitivement cet élément ?")) return false;
     
-    const { error } = await supabase.from(activeTab).delete().eq('id', item.id);
+    // Tentative de suppression réelle dans Supabase
+    const { error } = await supabase
+      .from(activeTab)
+      .delete()
+      .eq('id', item.id);
+    
     if (error) {
-      toast.error("Erreur lors de la suppression");
+      // Si cette erreur s'affiche, c'est qu'il manque une politique RLS DELETE dans Supabase
+      console.error("Erreur détaillée suppression :", error);
+      toast.error(`Erreur : ${error.message || "Suppression non autorisée"}`);
       return false;
     }
     
-    toast.success("Élément supprimé");
+    toast.success("Élément supprimé avec succès");
+    // Mise à jour de l'état local uniquement après succès
     setData(prev => prev.filter(i => i.id !== item.id));
     return true;
   };
@@ -106,7 +105,7 @@ export default function Validations() {
 
       {loading ? <div className="text-center py-20"><Spinner /></div> : (
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
-          {data.length === 0 ? <p className="col-span-full text-center py-20 text-slate-500">Aucun élément dans cette catégorie.</p> : 
+          {data.length === 0 ? <p className="col-span-full text-center py-20 text-slate-500">Aucun élément trouvé.</p> : 
             data.map(item => (
               <Card key={item.id} item={item} onValidate={handleValidate} onDelete={handleDelete} type={activeTab} viewMode={viewMode} />
             ))
@@ -147,7 +146,7 @@ function Card({ item, onValidate, onDelete, type, viewMode }) {
       
       {viewMode === 'pending' && (
         <div className="mt-4 flex gap-2">
-          <button disabled={processing} onClick={() => runAction(onValidate)} className="text-emerald-600 hover:bg-emerald-50 p-2 rounded-lg transition disabled:opacity-50" title="Valider et publier">
+          <button disabled={processing} onClick={() => runAction(onValidate)} className="text-emerald-600 hover:bg-emerald-50 p-2 rounded-lg transition disabled:opacity-50" title="Valider">
             {processing ? <Loader2 size={20} className="animate-spin"/> : <CheckCircle2 size={20}/>}
           </button>
           <button disabled={processing} onClick={() => runAction(onDelete)} className="text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition disabled:opacity-50" title="Supprimer">

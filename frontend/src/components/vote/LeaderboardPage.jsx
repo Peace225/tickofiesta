@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { supabase } from '../config/supabaseClient'; // N'oublie pas de vérifier ce chemin
+import { supabase } from "../../config/supabaseClient"; // N'oublie pas de vérifier ce chemin
 import { ArrowLeft, Trophy, Crown, Medal, TrendingUp, Zap } from 'lucide-react';
 
 export default function LeaderboardPage() {

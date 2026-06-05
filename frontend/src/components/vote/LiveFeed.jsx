@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { supabase } from '../../config/supabaseClient';
+import { supabase } from "../../config/supabaseClient";
 import { MessageSquare, Zap } from 'lucide-react';
 
 export default function LiveFeed({ voteId }) {

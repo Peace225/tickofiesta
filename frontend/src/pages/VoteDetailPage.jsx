@@ -144,12 +144,68 @@ export default function VoteDetailPage() {
     else { navigator.clipboard.writeText(referralLink); toast.success("Lien de parrainage copié !"); }
   };
 
+const handlePayment = async () => {
+    if (!phoneNumber || phoneNumber.length < 8) {
+      toast.error("Veuillez entrer un numéro de téléphone valide.");
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // 1. Appel de votre Edge Function
+      const { data, error } = await supabase.functions.invoke('init-geniuspay', {
+        body: {
+          amount: selectedPack.prix,
+          phone_number: phoneNumber, // Correspond à body.phone_number du backend
+          description: `Achat de ${selectedPack.votes} votes`, // Utilisé par body.description
+          userId: user?.id
+        }
+      });
+
+      // 2. Erreur réseau ou plantage de la fonction
+      if (error) {
+        throw new Error("Impossible de joindre le serveur de paiement.");
+      }
+
+      // 3. Erreur renvoyée par le bloc "catch" de votre backend ou GeniusPay
+      if (data.success === false || data.error) {
+        throw new Error(data.error || "Paiement refusé par le fournisseur.");
+      }
+
+      // 4. Succès ! Redirection vers l'URL générée
+      if (data.payment_url) { 
+        window.location.href = data.payment_url;
+      } else {
+        throw new Error("L'URL de paiement est introuvable.");
+      }
+
+    } catch (error) {
+      console.error("Erreur de paiement:", error);
+      toast.error(error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (loading) return <div className="min-h-screen flex justify-center items-center"><Spinner size="xl" /></div>;
 
   return (
     <div className="min-h-screen bg-[#f4f7fe] pb-20">
-      <CreditModal isOpen={paymentModalOpen} onClose={() => setPaymentModalOpen(false)} packs={PACKS} selectedPack={selectedPack} setSelectedPack={setSelectedPack} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} onPay={() => { toast.success("Paiement initié"); setPaymentModalOpen(false); }} isProcessing={isProcessing} />
-      <TopSupportersModal isOpen={supportersModalOpen} onClose={() => setSupportersModalOpen(false)} candidat={selectedCandidatForSupporters} onSponsorClick={() => { setSupportersModalOpen(false); setPaymentModalOpen(true); }} />
+
+      <CreditModal 
+          isOpen={paymentModalOpen} 
+          onClose={() => setPaymentModalOpen(false)} 
+          packs={PACKS} 
+          selectedPack={selectedPack} 
+          setSelectedPack={setSelectedPack} 
+          phoneNumber={phoneNumber} 
+          setPhoneNumber={setPhoneNumber} 
+          paymentMethod={paymentMethod} 
+          setPaymentMethod={setPaymentMethod} 
+          onPay={handlePayment} /* <--- ICI ON UTILISE LA NOUVELLE FONCTION */
+          isProcessing={isProcessing} 
+      />
 
       {/* HEADER UNIFORMISÉ SELON LE DESIGN (c_2.jpg) */}
       <header className="bg-[#0b1021] text-white pt-10 pb-14 px-4 md:px-8 border-b border-white/5">

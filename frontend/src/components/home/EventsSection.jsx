@@ -18,6 +18,7 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
 
   const [user, setUser] = useState(null);
   const [following, setFollowing] = useState([]); 
+  const [userFavorites, setUserFavorites] = useState([]); // <-- NOUVEAU: Stocke les favoris de l'utilisateur
 
   const PAGE_SIZE = 8; 
 
@@ -127,6 +128,8 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setUser(session.user);
+        
+        // 1. Charger les abonnements
         const { data: abonnementsData } = await supabase
           .from('abonnements')
           .select('organisateur_id')
@@ -134,6 +137,16 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
           
         if (abonnementsData) {
           setFollowing(abonnementsData.map(a => a.organisateur_id));
+        }
+
+        // 2. Charger les favoris existants (NOUVEAU)
+        const { data: favorisData } = await supabase
+          .from('favorites')
+          .select('event_id')
+          .eq('user_id', session.user.id);
+
+        if (favorisData) {
+          setUserFavorites(favorisData.map(f => f.event_id));
         }
       }
 
@@ -201,6 +214,75 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
     const orgId = item.organisateur_id;
     
     const isSubscribed = following.includes(orgId);
+    const isInitiallyLiked = userFavorites.includes(item.id);
+
+    // États locaux
+    const [isLiked, setIsLiked] = useState(isInitiallyLiked);
+    const [likesCount, setLikesCount] = useState(item.fakeLikes + (isInitiallyLiked ? 1 : 0));
+    const [isProcessingLike, setIsProcessingLike] = useState(false);
+
+    // Mettre à jour si les favoris de l'utilisateur changent en arrière-plan
+    useEffect(() => {
+      setIsLiked(isInitiallyLiked);
+    }, [isInitiallyLiked]);
+
+    const handleLike = async (e) => {
+      e.preventDefault(); 
+      
+      if (!user) {
+        toast.error("Connectez-vous pour ajouter aux favoris", { icon: '🔒' });
+        navigate('/login');
+        return;
+      }
+
+      if (isProcessingLike) return;
+      setIsProcessingLike(true);
+
+      const previousLikedState = isLiked;
+      
+      // MISE À JOUR VISUELLE INSTANTANÉE (+1 / -1)
+      setIsLiked(!previousLikedState);
+      setLikesCount(prev => previousLikedState ? prev - 1 : prev + 1);
+
+      try {
+        if (!previousLikedState) {
+          // Ajout en BDD
+          const { error: favError } = await supabase
+            .from('favorites')
+            .insert({ user_id: user.id, event_id: item.id });
+
+          if (favError) throw favError;
+
+          // Abonnement automatique à l'organisateur
+          if (orgId && !isSubscribed) {
+            const { error: subError } = await supabase
+              .from('abonnements')
+              .insert({ user_id: user.id, organisateur_id: orgId });
+            
+            if (!subError) {
+              setFollowing(prev => [...prev, orgId]);
+            }
+          }
+        } else {
+          // Suppression en BDD
+          const { error } = await supabase
+            .from('favorites')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('event_id', item.id);
+
+          if (error) throw error;
+        }
+      } catch (error) {
+        // En cas d'erreur de la BDD, on annule l'effet visuel
+        setIsLiked(previousLikedState);
+        setLikesCount(prev => previousLikedState ? prev + 1 : prev - 1);
+        console.error("Erreur favoris:", error);
+        toast.error("Action impossible");
+      } finally {
+        setIsProcessingLike(false);
+      }
+    };
 
     return (
       <div className="bg-white border border-gray-200 rounded-2xl flex flex-col hover:shadow-xl transition-shadow duration-300">
@@ -220,10 +302,20 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
         <div className="p-4 flex flex-col flex-1">
           <div className="flex justify-between items-start gap-3 mb-3">
             <h3 className="font-bold text-[14px] text-gray-800 line-clamp-2 leading-tight uppercase flex-1">{item.titre}</h3>
-            <div className="flex flex-col items-center shrink-0 cursor-pointer group">
-              <Heart size={20} className="text-gray-700 group-hover:text-red-500 transition-colors" />
-              <span className="text-[11px] text-gray-600 font-medium">{item.fakeLikes}</span>
-            </div>
+            {/* BOUTON J'AIME CONNECTÉ */}
+            <button 
+              onClick={handleLike}
+              disabled={isProcessingLike}
+              className="flex flex-col items-center shrink-0 cursor-pointer group disabled:opacity-50"
+            >
+              <Heart 
+                size={20} 
+                className={`transition-all duration-300 ${isLiked ? 'text-red-500 fill-red-500 scale-110' : 'text-gray-700 group-hover:text-red-500 group-hover:scale-110'}`} 
+              />
+              <span className={`text-[11px] font-medium transition-colors ${isLiked ? 'text-red-500' : 'text-gray-600'}`}>
+                {likesCount}
+              </span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2 text-gray-600 text-[12px] mb-2 font-medium">
@@ -344,7 +436,7 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
                       {activeCandidats.map((candidat) => {
                         const voteData = Array.isArray(candidat.votes) ? candidat.votes[0] : candidat.votes;
                         const nomConcours = voteData?.title;
-                        const slugConcours = voteData?.slug; // RECUPERATION DU SLUG
+                        const slugConcours = voteData?.slug; 
                         
                         return (
                           <div key={candidat.id} className="min-w-[260px] md:min-w-[300px] bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-3 snap-start hover:border-purple-300 transition-colors shadow-sm">
@@ -362,7 +454,6 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
                                   <Heart size={10} className="fill-rose-500" /> {candidat.fakeSoutiens}
                                 </div>
                               </div>
-                              {/* APPLICATION DU SLUG ICI */}
                               <Link to={`/votes/${slugConcours || candidat.vote_id}`} className="block text-center bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase py-1.5 rounded-lg transition-colors">Voter</Link>
                             </div>
                           </div>

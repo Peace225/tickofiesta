@@ -11,7 +11,7 @@ import {
 import toast from 'react-hot-toast';
 
 export default function EventDetailPage() {
-  const { id } = useParams(); // id peut être un slug OU un uuid
+  const { id } = useParams();
   const navigate = useNavigate();
   const { dark } = useSelector((s) => s.theme);
 
@@ -24,7 +24,6 @@ export default function EventDetailPage() {
   const [quantities, setQuantities] = useState({});
   const [paying, setPaying] = useState(false);
   
-  // État pour gérer la description (Voir plus / Voir moins)
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const MAX_DESC_LENGTH = 300;
 
@@ -85,7 +84,7 @@ export default function EventDetailPage() {
   const handleShare = () => {
     const shareData = {
       title: event.titre,
-      text: `Découvre cet événement incroyable : ${event.titre}`,
+      text: `Découvre cet événement : ${event.titre}`,
       url: window.location.href
     };
 
@@ -147,6 +146,23 @@ export default function EventDetailPage() {
     return 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 border-transparent';
   };
 
+  // Logique temps réel pour le statut de l'événement
+  const getEventStatus = (eventDate) => {
+    if (!eventDate) return null;
+    const now = new Date();
+    const eDate = new Date(eventDate);
+    
+    // Comparaison stricte des dates
+    now.setHours(0, 0, 0, 0);
+    eDate.setHours(0, 0, 0, 0);
+
+    const diff = eDate.getTime() - now.getTime();
+    
+    if (diff < 0) return { label: 'Terminé', style: 'bg-slate-500/20 text-slate-400 border-slate-500/30', pulse: false };
+    if (diff === 0) return { label: 'Aujourd\'hui', style: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', pulse: true };
+    return { label: 'À Venir', style: 'bg-sky-500/20 text-sky-400 border-sky-500/30', pulse: true };
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
   if (!event) return <div className="text-center py-20">Événement introuvable.</div>;
 
@@ -154,13 +170,15 @@ export default function EventDetailPage() {
    ? (Array.isArray(event.profiles)? event.profiles[0] : event.profiles)
     : null;
 
-  const organizerName = organizerProfile?.nom || organizerProfile?.full_name || "Organisateur de l'événement";
+  const organizerName = organizerProfile?.nom || organizerProfile?.full_name || "Organisateur";
   const organizerEmail = organizerProfile?.email || "Non renseigné";
   const organizerPhone = organizerProfile?.telephone || organizerProfile?.phone || organizerProfile?.phone_number || "Non renseigné";
 
-  const fakeParticipantsCount = (event.titre?.length || 10) * 12 + 150;
+  // Suppression des données truquées : Utilisation de données réelles ou masquage si null
+  const realParticipantsCount = event.participants_count || 0;
   
   const isDescLong = event.description?.length > MAX_DESC_LENGTH;
+  const status = getEventStatus(event.date);
 
   return (
     <div className={`min-h-screen ${dark? 'bg-[#06060c]' : 'bg-[#f4f7fd]'} pb-20`}>
@@ -191,10 +209,13 @@ export default function EventDetailPage() {
               </div>
               
               <div className="space-y-2 md:space-y-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1 rounded-full text-[10px] md:text-xs font-black tracking-wider uppercase bg-gradient-to-r from-sky-500/20 to-blue-500/20 text-sky-400 border border-sky-500/30">
-                  <span className="w-1 md:w-1.5 h-1 md:h-1.5 rounded-full bg-sky-400 animate-pulse" /> Événement Vedette
-                </span>
-                {/* TITRE REDUIT SUR MOBILE */}
+                {status && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1 rounded-full text-[10px] md:text-xs font-black tracking-wider uppercase border ${status.style}`}>
+                    {status.pulse && <span className={`w-1 md:w-1.5 h-1 md:h-1.5 rounded-full animate-pulse ${status.label === 'Aujourd\'hui' ? 'bg-emerald-400' : 'bg-sky-400'}`} />} 
+                    {status.label}
+                  </span>
+                )}
+                
                 <h1 className="text-xl sm:text-2xl md:text-4xl lg:text-5xl font-black text-white leading-tight tracking-tight max-w-3xl drop-shadow-sm">
                   {event.titre}
                 </h1>
@@ -205,7 +226,11 @@ export default function EventDetailPage() {
                   <div className="p-1 md:p-1.5 rounded-md md:rounded-lg bg-sky-500/10 text-sky-400"><Calendar size={12} className="md:w-[14px] md:h-[14px]" strokeWidth={2.5} /></div>
                   <div className="flex flex-col">
                     <span className="text-[8px] md:text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Date</span>
-                    <span>{new Date(event.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                    <span>
+                      {event.date 
+                        ? new Date(event.date).toLocaleDateString('fr-CI', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) 
+                        : "Date à définir"}
+                    </span>
                   </div>
                 </div>
 
@@ -213,7 +238,11 @@ export default function EventDetailPage() {
                   <div className="p-1 md:p-1.5 rounded-md md:rounded-lg bg-sky-500/10 text-sky-400"><Clock size={12} className="md:w-[14px] md:h-[14px]" strokeWidth={2.5} /></div>
                   <div className="flex flex-col">
                     <span className="text-[8px] md:text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Heure</span>
-                    <span>{event.heure?.slice(0, 5) || "12:30"}</span>
+                    <span>
+                      {event.date 
+                        ? new Date(event.date).toLocaleTimeString('fr-CI', { hour: '2-digit', minute: '2-digit' }) 
+                        : "À définir"}
+                    </span>
                   </div>
                 </div>
 
@@ -221,25 +250,23 @@ export default function EventDetailPage() {
                   <div className="p-1 md:p-1.5 rounded-md md:rounded-lg bg-sky-500/10 text-sky-400"><MapPin size={12} className="md:w-[14px] md:h-[14px]" strokeWidth={2.5} /></div>
                   <div className="flex flex-col">
                     <span className="text-[8px] md:text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Lieu</span>
-                    <span className="max-w-[100px] md:max-w-[150px] truncate">{event.lieu}</span>
+                    <span className="max-w-[100px] md:max-w-[150px] truncate">{event.lieu || "À définir"}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 md:gap-4 mt-3 md:mt-4 pt-4 md:pt-6 border-t border-white/10">
-                <div className="flex -space-x-2 md:-space-x-3">
-                  <img src="https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=64&h=64&fit=crop&crop=faces" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#030712] object-cover shadow-sm" alt="Participant" />
-                  <img src="https://images.unsplash.com/photo-1506277886164-e25aa3f4ef7f?w=64&h=64&fit=crop&crop=faces" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#030712] object-cover shadow-sm" alt="Participant" />
-                  <img src="https://images.unsplash.com/photo-1531384441138-2736e62e0919?w=64&h=64&fit=crop&crop=faces" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#030712] object-cover shadow-sm" alt="Participant" />
+              {/* Affichage des participants basé uniquement sur des données réelles */}
+              {realParticipantsCount > 0 && (
+                <div className="flex items-center gap-3 md:gap-4 mt-3 md:mt-4 pt-4 md:pt-6 border-t border-white/10">
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#030712] bg-sky-500/20 flex items-center justify-center backdrop-blur-md shadow-sm">
-                    <span className="text-sky-400 text-[8px] md:text-[10px] font-black">+{fakeParticipantsCount}</span>
+                    <Users size={14} className="text-sky-400" />
+                  </div>
+                  <div>
+                    <p className="text-white/90 text-xs md:text-sm font-bold">{realParticipantsCount} participant{realParticipantsCount > 1 ? 's' : ''} intéressé{realParticipantsCount > 1 ? 's' : ''}</p>
+                    <p className="text-white/50 text-[9px] md:text-[11px] font-medium">Rejoignez-les avant rupture de stock</p>
                   </div>
                 </div>
-                <div>
-                  <p className="text-white/90 text-xs md:text-sm font-bold">Personnes intéressées</p>
-                  <p className="text-white/50 text-[9px] md:text-[11px] font-medium">Rejoignez-les avant rupture de stock</p>
-                </div>
-              </div>
+              )}
 
             </div>
 
@@ -270,7 +297,7 @@ export default function EventDetailPage() {
             
             <div className="text-slate-600 dark:text-slate-300 leading-relaxed text-sm md:text-base whitespace-pre-wrap font-medium tracking-wide border-l-2 border-sky-500/40 pl-3 md:pl-4 relative">
               {isDescExpanded || !isDescLong 
-                ? event.description 
+                ? (event.description || "Aucune description fournie par l'organisateur.")
                 : `${event.description?.substring(0, MAX_DESC_LENGTH)}...`}
               
               {isDescLong && (
@@ -301,7 +328,7 @@ export default function EventDetailPage() {
                 </div>
               </div>
               <div className="space-y-2 md:space-y-3 pl-1 md:pl-2">
-                <div className="flex items-center gap-2 md:gap-3 text-slate-600 dark:text-slate-400 text-xs md:text-sm font-semibold"><MapPin size={14} className="md:w-4 md:h-4 text-slate-400 shrink-0" /><span className="truncate">{event.lieu}</span></div>
+                <div className="flex items-center gap-2 md:gap-3 text-slate-600 dark:text-slate-400 text-xs md:text-sm font-semibold"><MapPin size={14} className="md:w-4 md:h-4 text-slate-400 shrink-0" /><span className="truncate">{event.lieu || "Non renseigné"}</span></div>
                 <div className="flex items-center gap-2 md:gap-3 text-slate-600 dark:text-slate-400 text-xs md:text-sm font-semibold"><Mail size={14} className="md:w-4 md:h-4 text-slate-400 shrink-0" /><span className="truncate">{organizerEmail}</span></div>
                 <div className="flex items-center gap-2 md:gap-3 text-slate-600 dark:text-slate-400 text-xs md:text-sm font-semibold"><Phone size={14} className="md:w-4 md:h-4 text-slate-400 shrink-0" /><span>{organizerPhone}</span></div>
               </div>

@@ -70,15 +70,15 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Nettoyage de l'identifiant pour retirer les espaces éventuels
+    // Nettoyage de l'identifiant pour retirer les espaces et caractères non numériques
     const idString = form.identifiant.trim();
-    const cleanId = idString.replace(/\s+/g, '');
     const isEmail = idString.includes('@');
     
     // Si ce n'est pas un email, on recrée l'email technique du participant
+    // On retire tous les caractères non numériques pour le numéro
     const loginEmail = isEmail 
-      ? idString 
-      : `${cleanId}@participant.tickofiesta.ci`;
+      ? idString.toLowerCase()
+      : `${idString.replace(/\D/g, '')}@participant.tickofiesta.ci`;
 
     const loginPayload = { 
       email: loginEmail,
@@ -90,7 +90,6 @@ export default function LoginPage() {
     if (result.meta.requestStatus === 'fulfilled') {
       toast.success('Heureux de vous revoir sur TickoFiesta! 👋');
     } else {
-      // Affichage d'une erreur claire si les identifiants sont incorrects
       toast.error('Identifiant ou mot de passe incorrect.');
       dispatch(clearError());
     }

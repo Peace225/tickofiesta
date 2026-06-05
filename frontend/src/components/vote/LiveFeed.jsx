@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { supabase } from "../../config/supabaseClient";
-import { MessageSquare, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 export default function LiveFeed({ voteId }) {
   const { dark } = useSelector((s) => s.theme);
   const [feed, setFeed] = useState([]);
 
-  // Thème dynamique pour correspondre au reste de l'application
+  // Thème dynamique
   const theme = {
     card: dark ? 'bg-[#161621] border-white/5' : 'bg-white border-slate-100',
     text: dark ? 'text-white' : 'text-slate-800',
@@ -17,17 +17,28 @@ export default function LiveFeed({ voteId }) {
   };
 
   useEffect(() => {
-    // 1. Récupération initiale
+    // 1. Récupération initiale - Modifiée pour retirer is_public et message
     const fetchRecent = async () => {
-      const { data } = await supabase
+      // Construction de la requête de base
+      let query = supabase
         .from('vote_logs')
-        .select(`id, message, created_at, profiles(nom), candidats(nom)`)
-        .eq('is_public', true)
-        .not('message', 'is', null)
+        .select(`id, created_at, profiles(nom), candidats(nom)`)
         .order('created_at', { ascending: false })
         .limit(5);
-        
-      if (data) setFeed(data);
+
+      // Si le composant LiveFeed est lié à un vote spécifique, on filtre
+      if (voteId) {
+          // Note : Il faudrait que vote_logs ait une colonne vote_id,
+          // ou que l'on passe par le candidat. Pour l'instant, on laisse global.
+      }
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error("Erreur LiveFeed:", error);
+      } else if (data) {
+        setFeed(data);
+      }
     };
 
     fetchRecent();
@@ -36,18 +47,15 @@ export default function LiveFeed({ voteId }) {
     const channel = supabase.channel('realtime:vote_logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vote_logs' }, async (payload) => {
         
-        if (payload.new.is_public && payload.new.message) {
-          // CORRECTION : On doit récupérer les noms liés à ces IDs pour le nouveau message
-          const { data: newRow } = await supabase
-            .from('vote_logs')
-            .select(`id, message, created_at, profiles(nom), candidats(nom)`)
-            .eq('id', payload.new.id)
-            .single();
+        // CORRECTION : On récupère juste le nouveau vote avec ses relations
+        const { data: newRow } = await supabase
+          .from('vote_logs')
+          .select(`id, created_at, profiles(nom), candidats(nom)`)
+          .eq('id', payload.new.id)
+          .single();
 
-          if (newRow) {
-            // On l'ajoute en haut et on garde un maximum de 5 messages
-            setFeed(prev => [newRow, ...prev].slice(0, 5));
-          }
+        if (newRow) {
+          setFeed(prev => [newRow, ...prev].slice(0, 5));
         }
       })
       .subscribe();
@@ -55,13 +63,13 @@ export default function LiveFeed({ voteId }) {
     return () => supabase.removeChannel(channel);
   }, [voteId]);
 
-  // Si aucun message n'existe, on masque élégamment le bloc
+  // Si aucun message n'existe
   if (feed.length === 0) return null; 
 
   return (
     <div className={`rounded-3xl p-5 shadow-sm border overflow-hidden ${theme.card}`}>
       
-      {/* En-tête avec indicateur Live clignotant */}
+      {/* En-tête avec indicateur Live */}
       <h3 className={`text-[10px] font-black uppercase tracking-widest mb-5 flex items-center gap-2 ${theme.sub}`}>
         <span className="relative flex h-2.5 w-2.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
@@ -70,7 +78,7 @@ export default function LiveFeed({ voteId }) {
         Flux en direct
       </h3>
       
-      {/* Liste des messages */}
+      {/* Liste des votes */}
       <div className="space-y-4">
         {feed.map((log) => (
           <div 
@@ -78,17 +86,17 @@ export default function LiveFeed({ voteId }) {
             className={`animate-in slide-in-from-right fade-in duration-500 border-l-2 ${theme.accent} pl-3 py-1`}
           >
             <p className={`text-xs font-black ${theme.text} mb-1`}>
-              {log.profiles?.nom || 'Un supporter'} 
+              {log.profiles?.nom || 'Un participant'} 
               <span className="font-medium text-[10px] uppercase tracking-widest text-slate-500 mx-1">
-                pour
+                a voté pour
               </span> 
               <span className={theme.highlight}>
                 {log.candidats?.nom}
               </span>
             </p>
-            <p className={`text-[11px] italic flex items-start gap-1.5 ${theme.sub}`}>
-              <MessageSquare size={12} className="mt-0.5 opacity-50 shrink-0" />
-              "{log.message}"
+            <p className={`text-[10px] flex items-center gap-1 ${theme.sub}`}>
+              <Zap size={10} className="text-yellow-500" />
+              Il y a un instant
             </p>
           </div>
         ))}

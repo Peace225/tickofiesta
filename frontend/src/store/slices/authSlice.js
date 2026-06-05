@@ -7,25 +7,29 @@ const getErrorMessage = (error) => {
   if (error.message === 'Invalid login credentials') return 'Identifiant ou mot de passe incorrect';
   if (error.message === 'Email not confirmed') return 'Confirme ton email avant de te connecter';
   if (error.message === 'User already registered') return 'Cet utilisateur est déjà enregistré';
-  if (error.message === 'Signup requires a valid password') return 'Mot de passe invalide';
   return error.message || 'Une erreur est survenue';
 };
 
 // --- CONNEXION ---
 export const login = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
   try {
+    // credentials.email contient maintenant soit un vrai email (organisateur), 
+    // soit le format fictif @participant.tickofiesta.ci (client)
     const { data, error } = await supabase.auth.signInWithPassword({
       email: credentials.email,
-      password: credentials.mot_de_passe || credentials.password,
+      password: credentials.password,
     });
 
     if (error) throw error;
 
-    const { data: profile } = await supabase
+    // Récupération du profil complet
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('*') // Récupérer tout le profil pour avoir nom, tel et avatar
+      .select('*')
       .eq('id', data.user.id)
       .maybeSingle();
+
+    if (profileError) console.error("Erreur récupération profil:", profileError);
 
     const fullUser = { 
       ...data.user, 
@@ -34,6 +38,7 @@ export const login = createAsyncThunk('auth/login', async (credentials, { reject
       telephone: profile?.telephone || '',
       avatar_url: profile?.avatar_url || null
     };
+
     return { user: fullUser, session: data.session };
   } catch (err) {
     return rejectWithValue(getErrorMessage(err));
@@ -45,7 +50,7 @@ export const register = createAsyncThunk('auth/register', async (userData, { rej
   try {
     const { data, error } = await supabase.auth.signUp({
       email: userData.email.trim(),
-      password: userData.mot_de_passe || userData.password,
+      password: userData.password,
       options: {
         data: { 
           nom: userData.nom, 
@@ -111,7 +116,6 @@ const authSlice = createSlice({
     initialized: false 
   },
   reducers: {
-    // 🔥 AJOUT : Permet la mise à jour instantanée du state Redux
     updateUser: (state, action) => {
       state.user = { ...state.user, ...action.payload };
     },

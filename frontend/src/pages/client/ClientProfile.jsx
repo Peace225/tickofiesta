@@ -4,7 +4,7 @@ import { supabase } from '../../config/supabaseClient';
 import toast from 'react-hot-toast';
 import { 
   User, Mail, Phone, Award, Gift, 
-  Loader2, Save, Sparkles, ShieldCheck, CheckCircle2 
+  Loader2, Save, Sparkles, ShieldCheck, CheckCircle2, Camera 
 } from 'lucide-react';
 
 export default function ClientProfile() {
@@ -13,6 +13,7 @@ export default function ClientProfile() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
 
@@ -53,6 +54,51 @@ export default function ClientProfile() {
     }
   };
 
+  // --- NOUVELLE FONCTION : UPLOAD DE L'AVATAR ---
+  const uploadAvatar = async (event) => {
+    try {
+      setUploading(true);
+      
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('Vous devez sélectionner une image.');
+      }
+
+      const file = event.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // 1. Upload du fichier dans le bucket 'avatars'
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Récupération de l'URL publique
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // 3. Mise à jour de la table profiles
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      // 4. Mise à jour de l'affichage local
+      setProfile({ ...profile, avatar_url: publicUrl });
+      toast.success('Photo de profil mise à jour !');
+      
+    } catch (error) {
+      toast.error(error.message || "Erreur lors de l'upload de l'image");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.nom.trim()) return toast.error('Le nom est requis');
@@ -60,7 +106,7 @@ export default function ClientProfile() {
 
     setSaving(true);
     try {
-      // 1. Déterminer s'il faut accorder des points (si le profil était incomplet et est maintenant complet)
+      // 1. Déterminer s'il faut accorder des points
       const shouldAwardPoints = isIncomplete && form.nom && form.email;
       const pointsToAward = shouldAwardPoints ? 100 : 0;
       const newPointsBalance = (profile.points || 0) + pointsToAward;
@@ -72,7 +118,7 @@ export default function ClientProfile() {
           nom: form.nom.trim(),
           email: form.email.trim(),
           telephone: form.telephone.trim(),
-          points: newPointsBalance // Mise à jour de la cagnotte de points
+          points: newPointsBalance
         })
         .eq('id', user.id);
 
@@ -169,14 +215,40 @@ export default function ClientProfile() {
       <div className={`rounded-[2rem] border p-8 md:p-10 transition-colors ${theme.card}`}>
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-[#6c47ff]/20 to-[#a385ff]/20 flex items-center justify-center">
-              <User size={32} className="text-[#6c47ff]" />
+            
+            {/* AVATAR INTERACTIF */}
+            <div className="relative group cursor-pointer">
+              <div className="w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-[#6c47ff]/20 to-[#a385ff]/20 flex items-center justify-center overflow-hidden border border-[#6c47ff]/10">
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Profil" className="w-full h-full object-cover" />
+                ) : (
+                  <User size={32} className="text-[#6c47ff]" />
+                )}
+                
+                {/* Overlay au survol pour modifier l'image */}
+                <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  {uploading ? (
+                    <Loader2 size={20} className="text-white animate-spin" />
+                  ) : (
+                    <Camera size={20} className="text-white" />
+                  )}
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={uploadAvatar} 
+                    disabled={uploading} 
+                  />
+                </label>
+              </div>
             </div>
+
             <div>
               <h2 className={`text-xl font-bold ${theme.text}`}>Informations Personnelles</h2>
               <p className={`text-sm ${theme.sub}`}>Vos données sont protégées et privées.</p>
             </div>
           </div>
+          
           {!isEditing && !isIncomplete && (
             <button 
               onClick={() => setIsEditing(true)}

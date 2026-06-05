@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { supabase } from '../config/supabaseClient';
 import Spinner from "../components/ui/Spinner";
 import toast from 'react-hot-toast';
-import confetti from 'canvas-confetti'; // Import unique
+import confetti from 'canvas-confetti';
 import TopSupportersModal from '../components/vote/TopSupportersModal';
 import LiveFeed from '../components/vote/LiveFeed';
 import { Zap, X, Trophy, ArrowLeft, CheckCircle2, Share2, MapPin } from 'lucide-react';
@@ -28,7 +28,7 @@ const CreditModal = ({ isOpen, onClose, onPay, packs, selectedPack, setSelectedP
             <button key={pack.id} onClick={() => setSelectedPack(pack)} className={`p-3 rounded-2xl border-2 text-xs font-bold transition-all ${selectedPack.id === pack.id ? 'border-blue-600 bg-blue-50 text-blue-600 scale-[1.02]' : 'border-slate-100 hover:border-slate-200'}`}>
               {pack.votes} votes <br/> <span className="font-black text-sm">{pack.prix} F</span>
             </button>
-          ))}
+          ) ) }
         </div>
         <div className="space-y-3 mb-6">
           <input type="tel" maxLength="10" placeholder="Numéro (ex: 0700000000)" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm" />
@@ -65,11 +65,9 @@ export default function VoteDetailPage() {
   const [paymentMethod, setPaymentMethod] = useState('orange');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Fonction pour déclencher les confettis premium
-  const triggerSuccessAnimation = () => {
+  const triggerSuccessAnimation = useCallback(() => {
     const duration = 3000;
     const end = Date.now() + duration;
-    // Couleurs Premium TickoFiesta (Or, Violet, Cyan)
     const colors = ['#f5a623', '#6c47ff', '#00d4aa'];
 
     (function frame() {
@@ -91,8 +89,8 @@ export default function VoteDetailPage() {
       if (Date.now() < end) {
         requestAnimationFrame(frame);
       }
-    }());
-  };
+    } ( ) ) ;
+  }, []);
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -110,29 +108,75 @@ export default function VoteDetailPage() {
 
   useEffect(() => { loadInitialData(); }, [loadInitialData]);
 
+  useEffect(() => {
+    if (!user) return; 
+
+    const creditChannel = supabase.channel(`public:user_credits:user_id=eq.${user.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE', 
+        schema: 'public',
+        table: 'user_credits',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        const newBalance = payload.new.balance;
+        const oldBalance = payload.old ? payload.old.balance : 0;
+        setSolde(newBalance);
+
+        if (newBalance > oldBalance) {
+          const addedCredits = newBalance - oldBalance;
+          toast.success(`Paiement validé ! Vos ${addedCredits} crédits de vote ont été ajoutés.`, {
+              position: 'top-right',
+              duration: 6000,
+          });
+          triggerSuccessAnimation();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(creditChannel);
+    };
+  }, [user, triggerSuccessAnimation]); 
+
+  // --- NOUVELLE LOGIQUE DE VOTE ---
   const handleVote = async (candidat) => {
     if (!user) return navigate('/login');
+    
     if (solde <= 0) {
-      toast.error("Crédits insuffisants. Veuillez recharger vos crédits !", {
-        position: 'top-right',
-        duration: 4000,
-      });
+      toast.error("Crédits insuffisants. Veuillez recharger !", { position: 'top-right' });
       setPaymentModalOpen(true);
       return;
     }
+
+    const creditsRestants = solde - 1;
+    
+    // MAJ optimiste
+    setSolde(creditsRestants);
+    triggerSuccessAnimation();
+
+    if (creditsRestants > 0) {
+      toast.success(`Vote validé ! Il vous reste ${creditsRestants} crédit(s).`, {
+        icon: '✨',
+        duration: 3000
+      });
+    } else {
+      toast('Dernier crédit utilisé ! Rechargez pour continuer à soutenir vos candidats.', {
+        icon: '🔋',
+        style: { background: '#0b1021', color: '#00d4aa' },
+        duration: 5000
+      });
+    }
+
     const { error } = await supabase.from('vote_logs').insert([{ 
       user_id: user.id, 
       candidat_id: candidat.id,
       is_public: true 
     }]);
     
-    if (error) return toast.error("Erreur de vote");
-    
-    setSolde(s => s - 1);
-    toast.success(`Vote pour ${candidat.nom} validé !`);
-    
-    // Déclenchement de l'animation de confettis !
-    triggerSuccessAnimation();
+    if (error) {
+      setSolde(solde);
+      toast.error("Un problème est survenu lors du vote.");
+    }
   };
 
   const handleShareCandidate = async (candidat) => {
@@ -152,28 +196,29 @@ const handlePayment = async () => {
 
     setIsProcessing(true);
 
-    try {
-      // 1. Appel de votre Edge Function
+   try {
       const { data, error } = await supabase.functions.invoke('init-geniuspay', {
         body: {
           amount: selectedPack.prix,
-          phone_number: phoneNumber, // Correspond à body.phone_number du backend
-          description: `Achat de ${selectedPack.votes} votes`, // Utilisé par body.description
-          userId: user?.id
+          phone_number: phoneNumber, 
+          description: `Achat de ${selectedPack.votes} votes`, 
+          userId: user?.id,
+          // 👇 C'EST CETTE PARTIE QUI VA SAUVER TON SYSTÈME 👇
+          metadata: {
+            pack_id: selectedPack.id,
+            votes_to_credit: selectedPack.votes 
+          }
         }
       });
 
-      // 2. Erreur réseau ou plantage de la fonction
       if (error) {
         throw new Error("Impossible de joindre le serveur de paiement.");
       }
 
-      // 3. Erreur renvoyée par le bloc "catch" de votre backend ou GeniusPay
       if (data.success === false || data.error) {
         throw new Error(data.error || "Paiement refusé par le fournisseur.");
       }
 
-      // 4. Succès ! Redirection vers l'URL générée
       if (data.payment_url) { 
         window.location.href = data.payment_url;
       } else {
@@ -203,11 +248,10 @@ const handlePayment = async () => {
           setPhoneNumber={setPhoneNumber} 
           paymentMethod={paymentMethod} 
           setPaymentMethod={setPaymentMethod} 
-          onPay={handlePayment} /* <--- ICI ON UTILISE LA NOUVELLE FONCTION */
+          onPay={handlePayment} 
           isProcessing={isProcessing} 
       />
 
-      {/* HEADER UNIFORMISÉ SELON LE DESIGN (c_2.jpg) */}
       <header className="bg-[#0b1021] text-white pt-10 pb-14 px-4 md:px-8 border-b border-white/5">
         <div className="max-w-7xl mx-auto w-full">
           
@@ -217,7 +261,6 @@ const handlePayment = async () => {
 
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              {/* Badge Statut comme sur la maquette */}
               <div className="inline-flex items-center gap-1.5 bg-[#00d4aa]/10 text-[#00d4aa] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 border border-[#00d4aa]/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00d4aa] animate-pulse"></span>
                 VOTES OUVERTS
@@ -227,21 +270,29 @@ const handlePayment = async () => {
                 {voteData?.categorie || "CONCOURS EN COURS"}
               </h1>
 
-              {/* Localisation comme sur la maquette */}
               <div className="flex items-center text-slate-400 text-xs font-medium mt-4 gap-1.5">
                 <MapPin size={14} className="text-slate-500" />
                 <span>Abidjan, Côte d'Ivoire</span>
               </div>
             </div>
 
-            {/* Bouton pour accéder au Leaderboard */}
-            <Link 
-              to={`/votes/${slug}/leaderboard`}
-              className="inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-5 py-3 rounded-xl font-bold text-xs transition-all w-full md:w-auto"
-            >
-              <Trophy size={16} className="text-yellow-400" />
-              Voir le Classement
-            </Link>
+            {/* --- NOUVEAUX BOUTONS DROITE --- */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+              {user && (
+                <div className="flex items-center gap-2 bg-[#00d4aa]/10 border border-[#00d4aa]/30 text-[#00d4aa] px-5 py-3 rounded-xl font-black text-sm w-full justify-center sm:w-auto shadow-[0_0_15px_rgba(0,212,170,0.15)]">
+                  <Zap size={16} className={solde > 0 ? "animate-pulse" : "opacity-50"} />
+                  {solde} CRÉDIT{solde > 1 ? 'S' : ''}
+                </div>
+              )}
+
+              <Link 
+                to={`/votes/${slug}/leaderboard`}
+                className="inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-5 py-3 rounded-xl font-bold text-xs transition-all w-full sm:w-auto"
+              >
+                <Trophy size={16} className="text-yellow-400" />
+                Voir le Classement
+              </Link>
+            </div>
           </div>
 
         </div>

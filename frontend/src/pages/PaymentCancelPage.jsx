@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { XCircle, ArrowLeft, RefreshCcw } from 'lucide-react';
@@ -6,12 +6,25 @@ import { XCircle, ArrowLeft, RefreshCcw } from 'lucide-react';
 export default function PaymentCancelPage() {
   const navigate = useNavigate();
   const { dark } = useSelector((s) => s.theme);
+  const [returnUrl, setReturnUrl] = useState('/events');
 
-  // --- LOGIQUE DE NETTOYAGE ---
+  // --- LOGIQUE DE NETTOYAGE ET RÉCUPÉRATION D'URL ---
   useEffect(() => {
-    // On vide le panier temporaire stocké lors de la tentative d'achat
+    // 1. On vide le panier temporaire stocké lors de la tentative d'achat
     sessionStorage.removeItem('last_purchases');
+
+    // 2. On récupère l'URL d'origine pour le bouton "Réessayer"
+    const previousUrl = localStorage.getItem('url_avant_paiement');
+    if (previousUrl) {
+      setReturnUrl(previousUrl);
+    }
   }, []);
+
+  const handleRetry = () => {
+    // On nettoie le localStorage juste avant de repartir
+    localStorage.removeItem('url_avant_paiement');
+    navigate(returnUrl);
+  };
 
   // Styles Thème Premium
   const theme = {
@@ -35,7 +48,7 @@ export default function PaymentCancelPage() {
         {/* Bouton Retour Discret */}
         <div className="flex justify-start mb-8">
           <button 
-            onClick={() => navigate(-1)} 
+            onClick={handleRetry} 
             className={`group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${dark ? 'text-white/40 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
           >
             <div className="w-8 h-8 rounded-full border flex items-center justify-center transition-colors group-hover:bg-[#6c47ff] group-hover:border-[#6c47ff] group-hover:text-white border-current">
@@ -66,7 +79,7 @@ export default function PaymentCancelPage() {
           {/* Actions */}
           <div className="flex flex-col gap-3">
             <button 
-              onClick={() => navigate(-1)}
+              onClick={handleRetry}
               className="w-full bg-gradient-to-r from-gray-800 to-black text-white dark:from-white dark:to-gray-200 dark:text-black py-4 rounded-2xl text-sm font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all shadow-xl flex items-center justify-center gap-2"
             >
               <RefreshCcw size={16} /> Réessayer
@@ -74,6 +87,7 @@ export default function PaymentCancelPage() {
             
             <Link 
               to="/events" 
+              onClick={() => localStorage.removeItem('url_avant_paiement')}
               className={`w-full py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border flex items-center justify-center ${dark ? 'border-white/10 text-white/60 hover:bg-white/5 hover:text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}
             >
               Retour au catalogue

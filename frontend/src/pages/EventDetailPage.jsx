@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { supabase } from '../config/supabaseClient';
 import Spinner from '../components/ui/Spinner';
@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 export default function EventDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { dark } = useSelector((s) => s.theme);
 
   const [event, setEvent] = useState(null);
@@ -33,6 +34,24 @@ export default function EventDetailPage() {
     const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   };
+
+  // --- NOUVEAU : DÉTECTION DU RETOUR DE PAIEMENT ---
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('payment') === 'success') {
+      toast.success("Paiement réussi ! Allez dans votre Dashboard, onglet 'Mes Billets' pour télécharger votre accès.", {
+        duration: 8000,
+        icon: '🎫',
+        style: {
+          border: '1px solid #10B981',
+          padding: '16px',
+          color: '#064E3B',
+        },
+      });
+      // Nettoie l'URL pour retirer le ?payment=success sans recharger la page
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const fetchEventData = async () => {
@@ -113,7 +132,13 @@ export default function EventDetailPage() {
           body: { event_id: event.id, user_id: user.id, tickets: selectedTickets, total_amount: 0 }
         });
         if (error) throw error;
-        toast.success("Réservation gratuite validée avec succès!");
+        
+        // --- NOUVEAU MESSAGE POUR BILLET GRATUIT ---
+        toast.success("Réservation validée ! Allez dans votre Dashboard, onglet 'Mes Billets' pour télécharger votre accès.", {
+          duration: 8000,
+          icon: '🎫'
+        });
+        setQuantities({}); // Réinitialise le panier
         setPaying(false);
         return;
       }
@@ -124,9 +149,12 @@ export default function EventDetailPage() {
 
       if (error) throw error;
       if (data?.payment_url) {
+        // --- NOUVELLE LOGIQUE DE REDIRECTION ---
+        // On sauvegarde l'URL actuelle avec le paramètre de succès pour que la page de succès nous y ramène
+        localStorage.setItem('url_avant_paiement', window.location.pathname + '?payment=success');
         window.location.href = data.payment_url;
       } else {
-        toast.success("Réservation validée!");
+        toast.success("Réservation validée ! Allez dans 'Mes Billets' pour télécharger votre accès.");
       }
     } catch (err) {
       console.error("Erreur détaillée de la fonction backend :", err);
@@ -146,13 +174,11 @@ export default function EventDetailPage() {
     return 'bg-slate-800 dark:bg-white text-white dark:text-slate-900 border-transparent';
   };
 
-  // Logique temps réel pour le statut de l'événement
   const getEventStatus = (eventDate) => {
     if (!eventDate) return null;
     const now = new Date();
     const eDate = new Date(eventDate);
     
-    // Comparaison stricte des dates
     now.setHours(0, 0, 0, 0);
     eDate.setHours(0, 0, 0, 0);
 
@@ -174,9 +200,7 @@ export default function EventDetailPage() {
   const organizerEmail = organizerProfile?.email || "Non renseigné";
   const organizerPhone = organizerProfile?.telephone || organizerProfile?.phone || organizerProfile?.phone_number || "Non renseigné";
 
-  // Suppression des données truquées : Utilisation de données réelles ou masquage si null
   const realParticipantsCount = event.participants_count || 0;
-  
   const isDescLong = event.description?.length > MAX_DESC_LENGTH;
   const status = getEventStatus(event.date);
 
@@ -255,7 +279,6 @@ export default function EventDetailPage() {
                 </div>
               </div>
 
-              {/* Affichage des participants basé uniquement sur des données réelles */}
               {realParticipantsCount > 0 && (
                 <div className="flex items-center gap-3 md:gap-4 mt-3 md:mt-4 pt-4 md:pt-6 border-t border-white/10">
                   <div className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-[#030712] bg-sky-500/20 flex items-center justify-center backdrop-blur-md shadow-sm">

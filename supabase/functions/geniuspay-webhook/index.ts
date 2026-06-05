@@ -18,16 +18,56 @@ serve(async (req) => {
 
     const body = await req.json()
     const event = body.event_type || body.status
-    if (event!== 'payment.success' && event!== 'SUCCESS') {
+    if (event !== 'payment.success' && event !== 'SUCCESS') {
       return new Response(JSON.stringify({ message: "Ignoré" }), { headers: corsHeaders, status: 200 })
     }
 
     const data = body.data || body
-    const { purchase_id, order_id, user_id, tickets } = data
-    const pid = purchase_id || order_id
-    if (!pid ||!user_id ||!tickets) throw new Error("Données manquantes")
+    
+    // 1. Récupération intelligente des métadonnées (gère la structure de GeniusPay)
+    const metadata = data.metadata || body.metadata || {}
+    const user_id = data.user_id || metadata.userId
+    
+    if (!user_id) throw new Error("user_id manquant")
 
-    const ticketsArray = Array.isArray(tickets)? tickets : [tickets]
+    // ==========================================================
+    // SCÉNARIO A : ACHAT DE CRÉDITS DE VOTE
+    // ==========================================================
+    if (metadata.votes_to_credit) {
+      const votesToAdd = parseInt(metadata.votes_to_credit, 10)
+      
+      // On récupère le solde actuel de l'utilisateur
+      const { data: userCredit, error: fetchError } = await supabase
+        .from('user_credits')
+        .select('balance')
+        .eq('user_id', user_id)
+        .maybeSingle() // maybeSingle évite une erreur si l'utilisateur n'a pas encore de ligne
+
+      const currentBalance = userCredit?.balance || 0
+      const newBalance = currentBalance + votesToAdd
+
+      // On met à jour (ou on crée) la ligne avec le nouveau solde
+      const { error: upsertError } = await supabase
+        .from('user_credits')
+        .upsert({ user_id: user_id, balance: newBalance })
+
+      if (upsertError) throw upsertError
+
+      console.log(`✅ Succès: ${votesToAdd} crédits ajoutés pour l'utilisateur ${user_id}.`)
+      return new Response(JSON.stringify({ success: true, type: "votes", balance: newBalance }), { headers: corsHeaders })
+    }
+
+    // ==========================================================
+    // SCÉNARIO B : ACHAT DE BILLETS D'ÉVÉNEMENT (Ton code d'origine)
+    // ==========================================================
+    const { purchase_id, order_id, tickets } = data
+    const pid = purchase_id || order_id
+    
+    if (!pid || !tickets) {
+      throw new Error("Données manquantes : la transaction ne contient ni votes, ni tickets.")
+    }
+
+    const ticketsArray = Array.isArray(tickets) ? tickets : [tickets]
     const billets = []
 
     for (const t of ticketsArray) {
@@ -36,7 +76,7 @@ serve(async (req) => {
         billets.push({
           purchase_id: pid,
           ticket_type_id: t.ticket_type_id,
-          user_id,
+          user_id: user_id, // Utilisation du user_id consolidé
           scanned: false,
           status: 'valide',
           qr_code: `TKF-${pid}-${crypto.randomUUID().slice(0,8)}`
@@ -82,7 +122,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, count: inserted.length }), { headers: corsHeaders })
+    return new Response(JSON.stringify({ success: true, type: "tickets", count: inserted.length }), { headers: corsHeaders })
 
   } catch (e) {
     console.error(e)

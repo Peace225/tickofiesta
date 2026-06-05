@@ -7,43 +7,64 @@ import { Calendar, MapPin, Search, Filter, Sparkles } from 'lucide-react';
 
 const CATEGORIES_LIST = ['Concert', 'Conference', 'Sport', 'Festival', 'Concours', 'Autre'];
 
-const EventCard = memo(({ event, theme }) => (
-  <Link
-    to={`/events/${event.id}`}
-    className={`group relative rounded-[2rem] overflow-hidden border transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl ${theme.card}`}
-  >
-    <div className="relative aspect-[4/5] overflow-hidden">
-      <img
-        src={event.image || '/placeholder.webp'}
-        alt={event.titre}
-        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-        loading="lazy"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
-      <div className="absolute top-4 left-4">
-        <span className="bg-white/10 backdrop-blur-lg text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-white/20">
-          {event.categorie}
-        </span>
-      </div>
-    </div>
+// Composant EventCard mis à jour avec le Social Proof
+const EventCard = memo(({ event, theme, dark }) => {
+  // Génération d'un nombre pseudo-aléatoire mais fixe pour chaque événement (Social Proof)
+  const fakeParticipantsCount = (event.titre?.length || 10) * 12 + 150;
 
-    <div className="p-5">
-      <h3 className={`text-[15px] font-black leading-snug mb-4 line-clamp-2 ${theme.text}`}>
-        {event.titre}
-      </h3>
-      <div className="flex flex-col gap-2.5">
-        <div className={`flex items-center gap-2 text-xs font-semibold ${theme.sub}`}>
-          <Calendar size={14} className="text-[#6c47ff]" />
-          {new Date(event.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
-        </div>
-        <div className={`flex items-center gap-2 text-xs font-semibold ${theme.sub}`}>
-          <MapPin size={14} className="text-[#00d4aa]" />
-          <span className="truncate">{event.lieu}</span>
+  return (
+    <Link
+      to={`/events/${event.slug || event.id}`}
+      className={`group relative rounded-[2rem] overflow-hidden border transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl flex flex-col ${theme.card}`}
+    >
+      <div className="relative aspect-[4/5] overflow-hidden shrink-0">
+        <img
+          src={event.image || '/placeholder.webp'}
+          alt={event.titre}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+        <div className="absolute top-4 left-4">
+          <span className="bg-white/10 backdrop-blur-lg text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-white/20">
+            {event.categorie}
+          </span>
         </div>
       </div>
-    </div>
-  </Link>
-));
+
+      <div className="p-5 flex flex-col flex-1">
+        <h3 className={`text-[15px] font-black leading-snug mb-4 line-clamp-2 ${theme.text}`}>
+          {event.titre}
+        </h3>
+        
+        <div className="flex flex-col gap-2.5 mb-4">
+          <div className={`flex items-center gap-2 text-xs font-semibold ${theme.sub}`}>
+            <Calendar size={14} className="text-[#6c47ff]" />
+            {new Date(event.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+          </div>
+          <div className={`flex items-center gap-2 text-xs font-semibold ${theme.sub}`}>
+            <MapPin size={14} className="text-[#00d4aa]" />
+            <span className="truncate">{event.lieu}</span>
+          </div>
+        </div>
+
+        {/* --- NOUVEAU : BLOC SOCIAL PROOF --- */}
+        <div className={`mt-auto pt-4 border-t flex items-center justify-between ${dark ? 'border-white/5' : 'border-slate-100'}`}>
+          <div className="flex -space-x-2">
+            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=64&h=64&fit=crop&crop=faces" className={`w-6 h-6 rounded-full border-2 ${dark ? 'border-[#0b0a1a]' : 'border-white'} object-cover`} alt="Participant" />
+            <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=64&h=64&fit=crop&crop=faces" className={`w-6 h-6 rounded-full border-2 ${dark ? 'border-[#0b0a1a]' : 'border-white'} object-cover`} alt="Participant" />
+            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=64&h=64&fit=crop&crop=faces" className={`w-6 h-6 rounded-full border-2 ${dark ? 'border-[#0b0a1a]' : 'border-white'} object-cover`} alt="Participant" />
+          </div>
+          <span className={`text-[10px] font-bold uppercase tracking-wider ${theme.sub}`}>
+            +{fakeParticipantsCount} intéressés
+          </span>
+        </div>
+        {/* ----------------------------------- */}
+
+      </div>
+    </Link>
+  );
+});
 
 export default function EventsPage() {
   const [searchParams] = useSearchParams();
@@ -57,7 +78,6 @@ export default function EventsPage() {
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
-      // Correction : .in() permet de gérer les variations possibles du statut
       const { data, error } = await supabase
         .from('events')
         .select('*')
@@ -143,7 +163,7 @@ export default function EventsPage() {
           <div className="py-20 flex justify-center"><Spinner size="lg" /></div>
         ) : filtered.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {filtered.map(event => <EventCard key={event.id} event={event} theme={theme} />)}
+            {filtered.map(event => <EventCard key={event.id} event={event} theme={theme} dark={dark} />)}
           </div>
         ) : (
             <div className={`text-center py-20 ${theme.sub}`}>Aucun événement trouvé.</div>

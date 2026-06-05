@@ -69,22 +69,30 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const idString = form.identifiant.trim();
-    const isEmail = idString.includes('@');
-    let loginPayload = { password: form.mot_de_passe };
     
-    if (isEmail) {
-      loginPayload.email = idString;
-    } else {
-      let phone = idString.replace(/\s+/g, '');
-      if (phone.startsWith('00')) phone = '+' + phone.substring(2);
-      if (!phone.startsWith('+')) phone = '+225' + phone.slice(-10);
-      loginPayload.phone = phone;
-    }
+    // Nettoyage de l'identifiant pour retirer les espaces éventuels
+    const idString = form.identifiant.trim();
+    const cleanId = idString.replace(/\s+/g, '');
+    const isEmail = idString.includes('@');
+    
+    // Si ce n'est pas un email, on recrée l'email technique du participant
+    const loginEmail = isEmail 
+      ? idString 
+      : `${cleanId}@participant.tickofiesta.ci`;
+
+    const loginPayload = { 
+      email: loginEmail,
+      password: form.mot_de_passe 
+    };
 
     const result = await dispatch(login(loginPayload));
+    
     if (result.meta.requestStatus === 'fulfilled') {
       toast.success('Heureux de vous revoir sur TickoFiesta! 👋');
+    } else {
+      // Affichage d'une erreur claire si les identifiants sont incorrects
+      toast.error('Identifiant ou mot de passe incorrect.');
+      dispatch(clearError());
     }
   };
 
@@ -139,22 +147,41 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="relative">
                 <User size={20} className={`absolute left-4 top-1/2 -translate-y-1/2 ${apple.sub}`} />
-                <input type="text" required value={form.identifiant} onChange={(e) => setForm({ ...form, identifiant: e.target.value })} placeholder="Email ou téléphone" className={`w-full h-14 pl-12 pr-4 rounded-[1rem] ${apple.input}`} />
+                <input 
+                  type="text" 
+                  required 
+                  value={form.identifiant} 
+                  onChange={(e) => setForm({ ...form, identifiant: e.target.value })} 
+                  placeholder="Numéro de téléphone ou e-mail" 
+                  className={`w-full h-14 pl-12 pr-4 rounded-[1rem] ${apple.input}`} 
+                />
               </div>
               <div className="relative">
                 <Lock size={20} className={`absolute left-4 top-1/2 -translate-y-1/2 ${apple.sub}`} />
-                <input type={showPwd ? 'text' : 'password'} required value={form.mot_de_passe} onChange={(e) => setForm({ ...form, mot_de_passe: e.target.value })} placeholder="Mot de passe" className={`w-full h-14 pl-12 pr-12 rounded-[1rem] ${apple.input}`} />
+                <input 
+                  type={showPwd ? 'text' : 'password'} 
+                  required 
+                  value={form.mot_de_passe} 
+                  onChange={(e) => setForm({ ...form, mot_de_passe: e.target.value })} 
+                  placeholder="Mot de passe" 
+                  className={`w-full h-14 pl-12 pr-12 rounded-[1rem] ${apple.input}`} 
+                />
                 <button type="button" onClick={() => setShowPwd(!showPwd)} className={`absolute right-4 top-1/2 -translate-y-1/2 ${apple.sub}`}>
                   {showPwd ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-              <button type="submit" disabled={loading} className="w-full h-14 rounded-[1rem] bg-[#000000] dark:bg-[#ffffff] text-white dark:text-black font-semibold mt-2 flex items-center justify-center">
+              <div className="flex justify-end mt-2">
+                <Link to="/forgot-password" className="text-sm font-medium text-[#0071e3] hover:underline">
+                  Mot de passe oublié ?
+                </Link>
+              </div>
+              <button type="submit" disabled={loading} className="w-full h-14 rounded-[1rem] bg-[#000000] dark:bg-[#ffffff] text-white dark:text-black font-semibold mt-4 flex items-center justify-center">
                 {loading ? <Loader2 size={20} className="animate-spin" /> : <>Se connecter <ArrowRight size={18} className="ml-2" /></>}
               </button>
             </form>
           </div>
           <p className={`text-center text-sm mt-10 ${apple.sub}`}>
-            Nouveau sur TickoFiesta ? <Link to="/register" className="text-[#0071e3] font-semibold">Créer un compte</Link>
+            Nouveau sur TickoFiesta ? <Link to="/register" className="text-[#0071e3] font-semibold hover:underline">Créer un compte</Link>
           </p>
         </div>
       </div>

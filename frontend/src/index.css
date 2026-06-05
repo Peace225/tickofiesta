@@ -2,6 +2,23 @@
 
 @import "tailwindcss";
 
+/* ─── CONFIGURATION TAILWIND V4 ─────────────────────────────────────────────── */
+/* C'est ici que Tailwind apprend à lire vos variables CSS pour créer bg-accent, text-accent, etc. */
+@theme {
+  --color-accent: var(--accent);
+  --color-accent-light: var(--accent-light);
+  --color-accent-dark: var(--accent-dark);
+  
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-teal: var(--teal);
+  --color-danger: var(--danger);
+  
+  --color-dark-bg: var(--dark-bg);
+  --color-dark-surface: var(--dark-surface);
+  --color-dark-card: var(--dark-card);
+}
+
 /* ─── VARIABLES ──────────────────────────────────────────────────────────────── */
 :root {
   --accent: #6c47ff;
@@ -27,6 +44,79 @@
   --light-sub: #6b6890;
 }
 
+/* ─── THÈMES SAISONNIERS ────────────────────────────────────────────────────── */
+
+/* Décembre/Janvier : Fêtes (Rouge festif) */
+body.theme-holiday {
+  --accent: #dc2626; 
+  --accent-light: #ef4444;
+  --accent-dark: #991b1b;
+}
+
+/* Février : Saint-Valentin (Rose) */
+body.theme-valentine {
+  --accent: #ec4899; 
+  --accent-light: #f472b6;
+  --accent-dark: #be185d;
+}
+
+/* Février/Mars : Ramadan (Or chaud) */
+body.theme-ramadan {
+  --accent: #f59e0b; 
+  --accent-light: #fbbf24;
+  --accent-dark: #b45309;
+}
+
+/* Mars/Avril : Paquinou / Pâques (Vert nature) */
+body.theme-paquinou {
+  --accent: #16a34a; 
+  --accent-light: #22c55e;
+  --gold: #d97706;
+}
+
+/* Juin/Juillet/Août : Vacances / Été (Cyan vibrant) */
+body.theme-summer {
+  --accent: #06b6d4; 
+  --accent-light: #22d3ee;
+  --dark-bg: #04121a; 
+}
+
+/* 21 Juin : Fête de la Musique (Néon dynamique) */
+body.theme-music {
+  --accent: #8b5cf6; 
+  --accent-light: #a78bfa;
+  --teal: #f43f5e; 
+}
+
+/* 7 Août : Indépendance CI (Orange/Vert) */
+body.theme-ci {
+  --accent: #ff8200; 
+  --accent-light: #fdba74;
+  --accent-dark: #ea580c;
+  --teal: #009e60; 
+}
+
+/* Septembre : Rentrée (Bleu focus) */
+body.theme-rentree {
+  --accent: #2563eb; 
+  --accent-light: #3b82f6;
+}
+
+/* Octobre : Halloween (Orange sombre) */
+body.theme-halloween {
+  --accent: #ea580c;
+  --accent-light: #f97316;
+  --accent-dark: #9a3412;
+}
+
+/* Novembre : Black Friday (Or sur Noir profond) */
+body.theme-black-friday {
+  --accent: #fbbf24; 
+  --accent-light: #fcd34d;
+  --dark-bg: #000000; 
+  --dark-card: #0a0a0a;
+}
+
 /* ─── BASE ───────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -45,7 +135,8 @@ body {
   font-family: 'Inter', 'Space Grotesk', system-ui, sans-serif;
   background-color: var(--light-bg);
   color: var(--light-text);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Transition globale unifiée pour éviter les conflits */
+  transition: background-color 0.5s ease, color 0.5s ease, --accent 0.5s ease, --teal 0.5s ease;
 }
 
 body.dark {
@@ -63,7 +154,7 @@ body.dark {
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.toggle:checked { background: #6c47ff; }
+.toggle:checked { background: var(--accent); }
 .toggle::before {
   content: "";
   position: absolute; width: 20px; height: 20px;
@@ -79,58 +170,35 @@ body.dark {
 ::-webkit-scrollbar-thumb { background: rgba(108, 71, 255, 0.3); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(108, 71, 255, 0.6); }
 
-/* ─── ANIMATIONS & KEYFRAMES ────────────────────────────────────────────────── */
+/* ─── ANIMATIONS ────────────────────────────────────────────────────────────── */
 @keyframes enter {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-in { animation: enter 0.5s ease-out forwards; }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes bounce-cart {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.3); }
-}
-
-.animate-bounce-cart { animation: bounce-cart 0.5s ease; }
-.animate-fade-up { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-
-/* ─── GRADIENT TEXT ──────────────────────────────────────────────────────────── */
-.gradient-text {
-  background: linear-gradient(135deg, #6c47ff 0%, #a78bfa 50%, #00d4aa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
 /* ─── GLASS MORPHISM ─────────────────────────────────────────────────────────── */
 .glass {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* ─── INPUT PREMIUM ──────────────────────────────────────────────────────────── */
-.input-premium {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(108, 71, 255, 0.2);
-  border-radius: 14px;
-  padding: 12px 16px;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  outline: none;
-  width: 100%;
+/* ─── CORRECTION EXPORT PDF ───────────────────────────────────────────────── */
+.ticket-pdf-export {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border-color: #e2e8f0 !important;
 }
-.input-premium:focus {
-  border-color: rgba(108, 71, 255, 0.6);
-  box-shadow: 0 0 0 3px rgba(108, 71, 255, 0.1);
+.ticket-pdf-export * {
+  color: #000000 !important;
+  border-color: #e2e8f0 !important;
+  background-color: transparent !important;
 }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scroll-behavior: smooth; }
 
-/* ── Styles d'impression billets ── */
+/* ─── PRINT MEDIA ───────────────────────────────────────────────────────────── */
 @media print {
   body * { visibility: hidden !important; }
   .print-ticket-zone, .print-ticket-zone * {

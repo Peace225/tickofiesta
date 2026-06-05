@@ -1,140 +1,83 @@
 import { useSelector } from 'react-redux';
-import { Star, Sparkles, TrendingUp, Shield, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Star, Sparkles, TrendingUp, Shield, Zap } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function SocialProof() {
   const { dark } = useSelector(s => s.theme);
-  const [inView, setInView] = useState(false);
-  const ref = useRef(null);
-  const carouselRef = useRef(null); // ✅ Ref pour le carrousel
-
-  useEffect(() => {
-    const o = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { threshold: 0.1 });
-    if (ref.current) o.observe(ref.current);
-    return () => o.disconnect();
-  }, []);
 
   const theme = {
-    card: dark ? 'bg-[#0b0b14]/60 border-white/10' : 'bg-white/60 border-slate-900/5',
+    card: dark ? 'bg-[#0b0b14]/60 border-white/10' : 'bg-white/60 border-slate-200/60',
     text: dark ? 'text-white' : 'text-slate-900',
-    sub: dark ? 'text-slate-400' : 'text-slate-600',
+    sub: dark ? 'text-slate-400' : 'text-slate-500',
   };
 
   const testimonials = [
-    { name: "Kevin KOUHAME", role: "Organisateur", img: "/images/kevin.jpg", text: "Gestion fluide, tableau de bord temps réel. Service premium.", badge: "TOP" },
-    { name: "Aya Konan", role: "Participante", img: "/images/coach.jpg", text: "Achat en 2 clics, QR instantané. Simple et rapide.", badge: "VIP" },
-    { name: "Sergueï KOKOLIKO", role: "Promoteur", img: "/images/brad.jpg", text: "Votes sécurisés, paiements ponctuels. Parfait.", badge: "PRO" },
+    { name: "Kevin KOUHAME", role: "Organisateur", img: "/images/kevin.jpg", text: "Gestion fluide, tableau de bord temps réel. Service premium." },
+    { name: "Aya Konan", role: "Participante", img: "/images/coach.jpg", text: "Achat en 2 clics, QR instantané. Simple et rapide." },
+    { name: "Sergueï KOKOLIKO", role: "Promoteur", img: "/images/brad.jpg", text: "Votes sécurisés, paiements ponctuels. Parfait." },
   ];
 
-  // ✅ On double le tableau pour avoir un bel effet carrousel même sur grand écran
-  const carouselData = [...testimonials, ...testimonials];
-
-  // ✅ Fonction pour faire défiler le carrousel via les flèches
-  const scroll = (direction) => {
-    if (carouselRef.current) {
-      const scrollAmount = window.innerWidth > 640 ? 380 : 300; // Largeur de défilement
-      carouselRef.current.scrollBy({ 
-        left: direction === 'left' ? -scrollAmount : scrollAmount, 
-        behavior: 'smooth' 
-      });
-    }
-  };
-
-  const stats = [
-    { v: 500, l: "Events", i: Sparkles, c: "from-violet-600 to-violet-400", s: "+" },
-    { v: 50, l: "Tickets", i: TrendingUp, c: "from-emerald-500 to-teal-400", s: "K+" },
-    { v: 100, l: "SSL", i: Shield, c: "from-amber-500 to-yellow-400", s: "%" },
-    { v: 24, l: "Support", i: Zap, c: "from-pink-600 to-rose-400", s: "/7" },
-  ];
-
-  const Counter = ({ end, suffix }) => {
-    const [n, setN] = useState(0);
-    useEffect(() => {
-      if (!inView) return;
-      let c = 0; const t = setInterval(() => {
-        c += end / 60; if (c >= end) { setN(end); clearInterval(t); } else setN(Math.floor(c));
-      }, 16); return () => clearInterval(t);
-    }, [inView, end]);
-    return <>{n}{suffix}</>;
-  };
+  // On triple le tableau pour permettre un défilement infini sans coupure
+  const displayItems = [...testimonials, ...testimonials, ...testimonials];
 
   return (
-    <section ref={ref} className="py-10 md:py-16 overflow-hidden">
-      <div className="max-w-6xl mx-auto px-3 relative">
-        
-        {/* HEADER MINI */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/5 dark:bg-white/5 mb-3">
-            <Star size={10} className="text-amber-500" fill="currentColor" />
-            <span className="text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r from-violet-600 to-teal-500 bg-clip-text text-transparent">SOCIAL PROOF</span>
-          </div>
-          <h2 className={`text-xl sm:text-2xl md:text-3xl font-extrabold ${theme.text}`}>
-            La référence <span className="text-violet-600">événements</span>
+    <section className="py-16 md:py-24 relative overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] md:w-[500px] h-[300px] md:h-[500px] bg-violet-600/20 blur-[100px] rounded-full pointer-events-none" />
+
+      <div className="max-w-6xl mx-auto px-4 md:px-6 relative z-10">
+        <div className="text-center mb-10 md:mb-16">
+          <h2 className={`text-3xl md:text-5xl font-black mb-4 tracking-tight ${theme.text}`}>
+            Rejoignez l'élite des <span className="text-violet-500">événements</span>
           </h2>
-          <p className={`text-xs mt-1.5 ${theme.sub}`}>50k+ utilisateurs font confiance à TickoFiesta</p>
+          <p className={`max-w-md mx-auto text-sm md:text-base ${theme.sub}`}>Plus de 50 000 utilisateurs font confiance à TickoFiesta.</p>
         </div>
 
-        {/* ✅ CARROUSEL TESTIMONIALS */}
-        <div className="relative group mb-12">
-          
-          {/* Flèche Gauche (cachée sur mobile, visible sur desktop au survol) */}
-          <button 
-            onClick={() => scroll('left')} 
-            className={`hidden md:flex absolute -left-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full items-center justify-center shadow-xl border backdrop-blur-md transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110 ${dark ? 'bg-black/50 border-white/10 text-white hover:bg-black/80' : 'bg-white/80 border-slate-200 text-slate-800 hover:bg-white'}`}
+        {/* Carrousel Automatique avec Framer Motion */}
+        <div className="flex overflow-hidden mb-12 md:mb-20">
+          <motion.div 
+            className="flex gap-4 md:gap-8"
+            animate={{ x: ["0%", "-33.33%"] }} 
+            transition={{ duration: 25, ease: "linear", repeat: Infinity }}
+            whileHover={{ animationPlayState: "paused" }} // Pause au survol
           >
-            <ChevronLeft size={24} />
-          </button>
-
-          {/* Conteneur du Carrousel */}
-          <div 
-            ref={carouselRef} 
-            className="flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-4 px-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-          >
-            {carouselData.map((t, index) => (
-              <div 
-                key={index} 
-                className={`shrink-0 w-[85vw] sm:w-[350px] snap-center rounded-2xl p-6 border backdrop-blur-xl flex flex-col justify-between transition-transform duration-300 hover:-translate-y-1 ${theme.card}`}
-              >
-                <div>
-                  <div className="flex gap-1 mb-4">{[...Array(5)].map((_,i)=><Star key={i} size={14} className="fill-amber-500 text-amber-500"/>)}</div>
-                  <p className={`text-sm md:text-base font-medium leading-relaxed mb-6 ${theme.text}`}>“{t.text}”</p>
+            {displayItems.map((t, i) => (
+              <div key={i} className={`shrink-0 w-[85vw] md:w-[350px] p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border backdrop-blur-md ${theme.card}`}>
+                <div className="flex gap-1 mb-6">
+                  {[...Array(5)].map((_, i) => <Star key={i} size={16} className="fill-amber-400 text-amber-400"/>)}
                 </div>
+                <p className={`text-base md:text-xl mb-8 italic leading-relaxed ${theme.text}`}>"{t.text}"</p>
                 
-                <div className="flex items-center gap-4 pt-4 border-t border-white/5 dark:border-white/10">
-                  <img src={t.img} className="w-14 h-14 rounded-full object-cover border-2 border-white/10 shadow-md shrink-0" alt={t.name} />
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-bold truncate ${theme.text}`}>{t.name}</div>
-                    <div className={`text-xs mt-0.5 truncate ${theme.sub}`}>{t.role}</div>
+                <div className="flex items-center gap-4 border-t border-white/10 pt-6">
+                  <img 
+                    src={t.img} 
+                    alt={t.name} 
+                    className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-2 border-violet-500/30 shadow-lg"
+                    onError={(e) => e.target.src = 'https://ui-avatars.com/api/?name=' + t.name} 
+                  />
+                  <div>
+                    <div className={`font-black text-base md:text-lg ${theme.text}`}>{t.name}</div>
+                    <div className={`text-xs md:text-sm font-medium ${theme.sub}`}>{t.role}</div>
                   </div>
-                  <span className="shrink-0 text-[10px] font-black px-2.5 py-1.5 rounded-lg bg-amber-500 text-black tracking-widest">{t.badge}</span>
                 </div>
               </div>
             ))}
-          </div>
-
-          {/* Flèche Droite */}
-          <button 
-            onClick={() => scroll('right')} 
-            className={`hidden md:flex absolute -right-4 top-1/2 -translate-y-1/2 z-10 w-12 h-12 rounded-full items-center justify-center shadow-xl border backdrop-blur-md transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110 ${dark ? 'bg-black/50 border-white/10 text-white hover:bg-black/80' : 'bg-white/80 border-slate-200 text-slate-800 hover:bg-white'}`}
-          >
-            <ChevronRight size={24} />
-          </button>
+          </motion.div>
         </div>
 
-        {/* STATS MINI */}
-        <div className="grid grid-cols-4 gap-2 md:gap-4">
-          {stats.map(s => {
-            const I = s.i;
-            return (
-              <div key={s.l} className={`rounded-xl p-3 md:p-4 text-center border backdrop-blur-xl transition-all hover:scale-105 ${theme.card}`}>
-                <div className={`w-8 h-8 md:w-10 md:h-10 mx-auto mb-2 rounded-lg bg-gradient-to-br ${s.c} grid place-items-center`}>
-                  <I size={16} className="text-white" />
-                </div>
-                <div className={`text-lg md:text-xl font-black leading-none ${theme.text}`}><Counter end={s.v} suffix={s.s} /></div>
-                <div className={`text-[10px] md:text-xs uppercase font-semibold mt-1.5 ${theme.sub}`}>{s.l}</div>
-              </div>
-            );
-          })}
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6">
+          {[
+            { v: "500+", l: "Events", i: Sparkles },
+            { v: "50K+", l: "Tickets", i: TrendingUp },
+            { v: "100%", l: "SSL", i: Shield },
+            { v: "24/7", l: "Support", i: Zap }
+          ].map((s, i) => (
+            <div key={i} className={`p-4 md:p-8 rounded-2xl md:rounded-3xl border ${theme.card} flex flex-col items-center text-center`}>
+              <s.i className="mb-2 md:mb-4 text-violet-500" size={20} />
+              <div className={`text-xl md:text-3xl font-black mb-1 ${theme.text}`}>{s.v}</div>
+              <div className={`text-[9px] md:text-[11px] uppercase tracking-widest font-bold ${theme.sub}`}>{s.l}</div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

@@ -17,8 +17,6 @@ serve(async (req) => {
     )
 
     const body = await req.json()
-
-    // GeniusPay peut envoyer 'payment.success' ou 'SUCCESS'
     const event = body.event_type || body.status
     if (event!== 'payment.success' && event!== 'SUCCESS') {
       return new Response(JSON.stringify({ message: "Ignoré" }), { headers: corsHeaders, status: 200 })
@@ -26,16 +24,12 @@ serve(async (req) => {
 
     const data = body.data || body
     const { purchase_id, order_id, user_id, tickets } = data
-
     const pid = purchase_id || order_id
-    if (!pid ||!user_id ||!tickets) {
-      throw new Error("Données manquantes")
-    }
+    if (!pid ||!user_id ||!tickets) throw new Error("Données manquantes")
 
-    // tickets peut être un array ou un objet unique
     const ticketsArray = Array.isArray(tickets)? tickets : [tickets]
-
     const billets = []
+
     for (const t of ticketsArray) {
       const qty = parseInt(t.quantity || t.quantite || 1, 10)
       for (let i = 0; i < qty; i++) {
@@ -44,21 +38,35 @@ serve(async (req) => {
           ticket_type_id: t.ticket_type_id,
           user_id,
           scanned: false,
-          qr_code: `TKF-${pid}-${Date.now()}-${i}` // tu peux générer ton QR ici
+          status: 'valide',
+          qr_code: `TKF-${pid}-${crypto.randomUUID().slice(0,8)}`
         })
       }
     }
 
-    const { error } = await supabase.from('user_tickets').insert(billets)
+    // 1. Crée les billets et récupère les IDs
+    const { data: inserted, error } = await supabase.from('user_tickets').insert(billets).select('id')
     if (error) throw error
 
-    // SMS
-    try {
-      const { data: profile } = await supabase.from('profiles')
-       .select('phone, full_name').eq('id', user_id).single()
+    // 2. Récupère email + téléphone
+    const { data: { user } } = await supabase.auth.admin.getUserById(user_id)
+    const { data: profile } = await supabase.from('profiles').select('phone, full_name').eq('id', user_id).single()
 
-      if (profile?.phone) {
-        const totalQty = billets.length
+    // 3. Envoi pour chaque billet
+    for (const ticket of inserted) {
+      if (user?.email) {
+        // → Client AVEC email : PDF par email
+        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-ticket-email`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ ticket_id: ticket.id })
+        })
+      } else if (profile?.phone) {
+        // → Client SANS email : lien SMS
+        const link = `https://tickofiesta.com/ticket/${ticket.id}`
         await fetch(Deno.env.get('SMS_PROVIDER_URL')!, {
           method: 'POST',
           headers: {
@@ -68,13 +76,13 @@ serve(async (req) => {
           body: JSON.stringify({
             to: profile.phone,
             sender: Deno.env.get('SMS_SENDER') || 'TickoFiesta',
-            message: `TickoFiesta: Merci ${profile.full_name||''}! ${totalQty} billet(s) confirmé(s). Voir: tickofiesta.com/mes-billets`
+            message: `TickoFiesta: ${profile.full_name||''}, votre billet est prêt! Ouvrez: ${link}`
           })
         })
       }
-    } catch(e) { console.log('SMS fail:', e.message) }
+    }
 
-    return new Response(JSON.stringify({ success: true, count: billets.length }), { headers: corsHeaders })
+    return new Response(JSON.stringify({ success: true, count: inserted.length }), { headers: corsHeaders })
 
   } catch (e) {
     console.error(e)

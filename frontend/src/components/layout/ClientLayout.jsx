@@ -17,13 +17,13 @@ export default function ClientLayout() {
 
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // --- LIENS DE NAVIGATION CLIENT (Navigation fluide sur place) ---
+  // --- LIENS DE NAVIGATION CLIENT CORRIGÉS (Alignés avec App.jsx) ---
   const navLinks = useMemo(() => [
-    { name: 'Accueil Site', path: '/client-home', icon: Globe }, // Note le nouveau path ici !
-    { name: 'Mes Billets', path: '/mes-billets', icon: Ticket },
-    { name: 'Votes Live', path: '/mes-votes', icon: Zap },
-    { name: 'Paiements', path: '/mes-transactions', icon: CreditCard },
-    { name: 'Mon Profil', path: '/mon-profil', icon: User },
+    { name: 'Accueil Site', path: '/', icon: Globe }, 
+    { name: 'Mes Billets', path: '/client/billets', icon: Ticket },
+    { name: 'Votes Live', path: '/client/votes', icon: Zap },
+    { name: 'Paiements', path: '/client/transactions', icon: CreditCard },
+    { name: 'Mon Profil', path: '/client/profile', icon: User },
   ], []);
 
   const handleLogout = async () => {
@@ -37,7 +37,12 @@ export default function ClientLayout() {
     }
   };
 
-  const isPathActive = (linkPath) => location.pathname.startsWith(linkPath);
+  const isPathActive = (linkPath) => {
+    if (linkPath === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname.startsWith(linkPath);
+  };
 
   const theme = {
     bg: dark ? 'bg-[#05050A]' : 'bg-[#f4f7ff]',
@@ -53,7 +58,7 @@ export default function ClientLayout() {
       
       {/* HEADER MOBILE */}
       <header className={`lg:hidden fixed top-0 w-full z-40 border-b flex justify-between items-center px-4 py-3 ${theme.navBg}`}>
-        <Link to="/mes-billets" className="flex items-center gap-2">
+        <Link to="/client/billets" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6c47ff] to-[#00d4aa] flex items-center justify-center shadow-[0_0_15px_rgba(108,71,255,0.4)]">
             <Sparkles size={16} className="text-white" />
           </div>

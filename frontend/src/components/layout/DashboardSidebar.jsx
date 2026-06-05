@@ -7,7 +7,7 @@ import LogoTicko from '../../assets/logo1.png';
 import { 
   LayoutDashboard, CalendarDays, Ticket, PiggyBank, 
   Settings, LogOut, TrendingUp, Vote, Store, Sparkles, House,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Users // <-- Ajout de Users ici
 } from 'lucide-react';
 
 const DashboardSidebar = memo(() => {
@@ -45,6 +45,8 @@ const DashboardSidebar = memo(() => {
     { name: 'Cagnottes', path: '/dashboard/cagnottes', icon: <PiggyBank size={20} />, hint: 'Fonds solidaires' },
     { name: 'Stands', path: '/dashboard/stands', icon: <Store size={20} />, hint: 'Exposants & Ventes' },
     { name: 'Votes', path: '/dashboard/votes', icon: <Vote size={20} />, hint: 'Sondages & Awards' },
+    // NOUVEAU LIEN AJOUTÉ ICI :
+    { name: 'Communauté', path: '/dashboard/community', icon: <Users size={20} />, hint: 'Vos abonnés' },
     { name: 'Stats', path: '/dashboard/stats', icon: <TrendingUp size={20} />, hint: 'Analyse de données' },
     { name: 'Profil', path: '/dashboard/settings', icon: <Settings size={20} />, hint: 'Paramètres compte' },
   ], []);
@@ -150,6 +152,7 @@ const DashboardSidebar = memo(() => {
            <House size={20} />
            <span className="text-[9px] font-bold uppercase mt-1">Accueil</span>
         </Link>
+        {/* Affichage des 4 premiers liens sur mobile pour éviter de surcharger */}
         {links.slice(0, 4).map((link) => {
           const active = isActive(link.path);
           return (

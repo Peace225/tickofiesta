@@ -8,6 +8,9 @@ import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
+// Import de votre nouveau service de notification
+import { sendFullNotification } from '../services/notificationService';
+
 export default function SuccessPayment() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -31,15 +34,15 @@ export default function SuccessPayment() {
         return;
     }
 
-    // Le but est de créer le billet si on a les infos en cache (suite à un retour de GeniusPay)
-    // OU d'afficher le billet existant si on revient avec un purchaseId.
     const processAndFetchTickets = async () => {
       try {
         setLoading(true);
         let finalPurchaseId = purchaseId;
+        let isNewPurchase = false; // Permet d'éviter le spam si l'utilisateur rafraîchit la page
 
         // --- ÉTAPE 1 : GÉNÉRATION DU BILLET (Si retour direct de paiement) ---
         if (!finalPurchaseId && tarifId) {
+            isNewPurchase = true;
             
             // 1a. Création de l'achat
             const { data: purchaseData, error: purchaseErr } = await supabase
@@ -69,7 +72,6 @@ export default function SuccessPayment() {
             if (ticketErr) throw ticketErr;
 
             // 1c. Mise à jour de la table tarifs (incrément des ventes)
-            // Si vous n'avez pas de fonction RPC, on met à jour via un select puis update
             const { data: currentTarif } = await supabase.from('tarifs').select('quantite_vendue, quantite_disponible').eq('id', tarifId).single();
             if (currentTarif) {
                 await supabase.from('tarifs')
@@ -101,16 +103,34 @@ export default function SuccessPayment() {
         if (ticketsError) throw ticketsError;
         setTickets(ticketsData || []);
 
+        let fetchedEventDetails = null;
+
         // 2b. Récupération des détails liés à l'événement
         if (ticketsData && ticketsData.length > 0) {
           const { data: typeData, error: typeError } = await supabase
-            .from('tarifs') // IMPORTANT: Mise à jour du nom de la table selon vos captures d'écran
-            .select('nom, prix, events:event_id(titre, date, lieu, image)') // Ajustement des relations
+            .from('tarifs')
+            .select('nom, prix, events:event_id(titre, date, lieu, image)')
             .eq('id', ticketsData[0].ticket_type_id)
             .single();
 
           if (typeError) throw typeError;
+          fetchedEventDetails = typeData;
           setEventDetails(typeData);
+        }
+
+        // --- ÉTAPE 3 : DÉCLENCHEMENT DE LA NOTIFICATION ET DE L'EMAIL ---
+        // On n'envoie la notification que s'il s'agit d'un nouvel achat
+        if (isNewPurchase && fetchedEventDetails) {
+            const eventTitle = fetchedEventDetails.events?.titre || "votre événement";
+            
+            // L'appel n'a pas besoin de bloquer l'UI, il s'exécute en arrière-plan
+            sendFullNotification(
+              user.id,
+              user.email,
+              "🎟️ Vos billets TickoFiesta sont confirmés !",
+              `Félicitations ! Votre achat pour l'événement "${eventTitle}" a bien été validé. Vous pouvez retrouver vos QR Codes d'accès dans la section "Mes billets". Préparez-vous à vivre une expérience inoubliable !`,
+              'ticket'
+            );
         }
 
       } catch (err) {
@@ -191,7 +211,7 @@ export default function SuccessPayment() {
           <button onClick={handleDownloadPDF} disabled={downloading} className="bg-[#00d4aa] text-black px-8 py-4 rounded-xl font-black uppercase text-xs hover:bg-[#00b390] transition-colors">
             {downloading ? 'Génération...' : 'Télécharger mes billets'}
           </button>
-          <button onClick={() => navigate('/mes-billets')} className="bg-white/10 px-8 py-4 rounded-xl font-black uppercase text-xs hover:bg-white/20 transition-all border border-white/20">
+          <button onClick={() => navigate('/client/billets')} className="bg-white/10 px-8 py-4 rounded-xl font-black uppercase text-xs hover:bg-white/20 transition-all border border-white/20">
             Voir le portefeuille
           </button>
         </div>

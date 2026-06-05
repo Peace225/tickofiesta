@@ -3,7 +3,8 @@ import { useSelector } from 'react-redux';
 import { supabase } from '../../config/supabaseClient';
 import Spinner from '../../components/ui/Spinner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
-import { TrendingUp, ShoppingBag, Layout, PiggyBank, Store, AlertCircle, Sparkles } from 'lucide-react';
+// N'oubliez pas d'importer Users ici 👇
+import { TrendingUp, ShoppingBag, Layout, PiggyBank, Store, AlertCircle, Sparkles, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function OrgDashboard() {
@@ -14,6 +15,7 @@ export default function OrgDashboard() {
   const [revenus, setRevenus] = useState([]);
   const [cagnottes, setCagnottes] = useState([]);
   const [stands, setStands] = useState([]);
+  const [followersCount, setFollowersCount] = useState(0); // <-- Nouvel état pour les abonnés
   const [loading, setLoading] = useState(true);
 
   const getGreeting = () => {
@@ -31,18 +33,21 @@ export default function OrgDashboard() {
     if (!user) return;
     setLoading(true);
     try {
-      // Chargement en parallèle
-      const [ev, rev, cag, std] = await Promise.all([
+      // Chargement en parallèle (avec la nouvelle requête pour les abonnés)
+      const [ev, rev, cag, std, followers] = await Promise.all([
         supabase.from('events').select('id, titre, statut').eq('organisateur_id', user.id),
         supabase.from('stats_organisateurs').select('*').eq('organisateur_id', user.id),
         supabase.from('cagnottes').select('*').eq('organisateur_id', user.id).order('created_at', { ascending: false }).limit(3),
-        supabase.from('stands').select('id, nom, event_id, statut, prix_location, created_at').eq('organisateur_id', user.id)
+        supabase.from('stands').select('id, nom, event_id, statut, prix_location, created_at').eq('organisateur_id', user.id),
+        // On récupère juste le compte exact des abonnés pour plus de performance 👇
+        supabase.from('abonnements').select('*', { count: 'exact', head: true }).eq('organisateur_id', user.id)
       ]);
       
       setEvents(ev.data || []);
       setRevenus((rev.data || []).map(s => ({...s, event: ev.data?.find(e => e.id === s.event_id) })));
       setCagnottes(cag.data || []);
       setStands(std.data || []);
+      setFollowersCount(followers.count || 0); // <-- On stocke le nombre d'abonnés
     } catch (err) {
       toast.error("Erreur de chargement");
     } finally {
@@ -53,13 +58,14 @@ export default function OrgDashboard() {
   useEffect(() => { loadData(); }, [user]);
 
   const stats = useMemo(() => ({
+    abonnes: followersCount, // <-- Ajout à l'objet stats
     events: events.length,
     ventes: revenus.reduce((a, r) => a + (r.billets_vendus || 0), 0),
     ca: revenus.reduce((a, r) => a + (r.total || 0), 0),
     cagnottes: cagnottes.reduce((a, c) => a + (c.montant_actuel || 0), 0),
     standsDispo: stands.filter(s => s.statut === 'disponible').length,
     standsTotal: stands.length
-  }), [revenus, events, cagnottes, stands]);
+  }), [revenus, events, cagnottes, stands, followersCount]);
 
   const theme = {
     bg: dark ? 'bg-[#050507]' : 'bg-[#f8f9ff]',
@@ -87,9 +93,10 @@ export default function OrgDashboard() {
           )}
         </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* KPIs : Grille passée à 6 colonnes sur grand écran (lg:grid-cols-6) */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
+            { label: 'Abonnés', value: stats.abonnes, icon: Users, color: 'text-[#e65c00]' }, // <-- Nouvelle carte
             { label: 'Événements', value: stats.events, icon: Layout, color: 'text-blue-500' },
             { label: 'Billets', value: stats.ventes, icon: ShoppingBag, color: 'text-emerald-500' },
             { label: "CA Total", value: formatCurrency(stats.ca), icon: TrendingUp, color: 'text-violet-500' },
@@ -104,7 +111,7 @@ export default function OrgDashboard() {
           ))}
         </div>
 
-        {/* Graphique corrigé */}
+        {/* Graphique */}
         <div className={`p-8 rounded-3xl border ${theme.card}`}>
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -113,7 +120,6 @@ export default function OrgDashboard() {
             </div>
           </div>
           
-          {/* Conteneur parent avec hauteur fixe indispensable pour Recharts */}
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={revenus.slice(0, 5).map(r => ({ name: r.event?.titre?.substring(0, 10) || 'Event', revenus: r.total || 0 }))}>

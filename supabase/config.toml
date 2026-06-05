@@ -439,3 +439,36 @@ entrypoint = "./functions/init-geniuspay/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/init-geniuspay/*.html" ]
+
+[functions.send-announcement]
+enabled = true
+verify_jwt = false
+import_map = "./functions/send-announcement/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-announcement/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-announcement/*.html" ]
+
+[functions.track-click]
+enabled = true
+verify_jwt = false
+import_map = "./functions/track-click/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/track-click/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/track-click/*.html" ]
+
+[functions.send-ticket-email]
+enabled = true
+verify_jwt = false
+import_map = "./functions/send-ticket-email/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-ticket-email/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-ticket-email/*.html" ]

@@ -23,7 +23,6 @@ export default function HomePage() {
 
   const [heroRef, heroInView] = useInView(0.05);
   const [eventsRef, eventsInView] = useInView(0.05);
-  const [votesRef, votesInView] = useInView(0.05);
   const [ctaRef, ctaInView] = useInView(0.05);
 
   useEffect(() => {
@@ -36,20 +35,18 @@ export default function HomePage() {
         const { data: vData, error: vErr } = await supabase
           .from('votes')
           .select('*')
-          .eq('statut', 'actif') 
-          .gte('date_fin', new Date().toISOString()) 
-          .order('total_votes', { ascending: false })
+          .gte('end_at', new Date().toISOString()) 
+          .order('end_at', { ascending: true })
           .limit(6);
           
         if (vErr) console.error("Erreur votes:", vErr);
         setVotes(vData || []);
 
         // --- B. RÉCUPÉRATION DES PARTENAIRES ---
-        // On utilise 'partenaires' pour correspondre au bucket Supabase
         const { data: pData, error: pErr } = await supabase
           .from('partenaires') 
           .select('*')
-          .eq('actif', true); // On suppose que la colonne est 'actif'
+          .eq('actif', true);
           
         if (pErr && pErr.code !== '42P01') console.error("Erreur partenaires:", pErr);
         setPartners(pData || []);
@@ -87,7 +84,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 ${dark ? "bg-[#080812]" : "bg-[#fafafe]"}`}>
+    <div className={`min-h-screen transition-colors duration-500 ${dark ? "bg-dark-bg" : "bg-light-bg"}`}>
 
       {/* SECTION HERO */}
       <HeroSection
@@ -97,15 +94,23 @@ export default function HomePage() {
         setSearch={setSearch}
         handleSearch={handleSearchSubmit}
         stats={[
-          { val: totalValidEvents, label: "Événements", color: "text-[#6c47ff]" },
-          { val: (votes || []).length, label: "Votes actifs", color: "text-[#f5a623]" }
+          { 
+            val: totalValidEvents, 
+            label: "Événements", 
+            color: "text-accent" 
+          },
+          { 
+            val: (votes || []).length, 
+            label: "Votes actifs", 
+            color: "text-gold" 
+          }
         ]}
       />
 
-      {/* GESTIONNAIRE DE PUBS (Slider ou Bannière) */}
+      {/* GESTIONNAIRE DE PUBS */}
       <AdsManager ads={ads} />
 
-      {/* SECTION ÉVÉNEMENTS (ANCRE DE RECHERCHE) */}
+      {/* SECTION ÉVÉNEMENTS */}
       <div id="events-section">
         <EventsSection
           eventsRef={eventsRef}
@@ -115,7 +120,7 @@ export default function HomePage() {
         />
       </div>
 
-      {/* PREUVE SOCIALE (Compteurs, témoignages, etc.) */}
+      {/* PREUVE SOCIALE */}
       <SocialProof />
       
       {/* SECTION APPEL À L'ACTION */}

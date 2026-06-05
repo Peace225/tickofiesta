@@ -14,6 +14,7 @@ const TikTokIcon = ({ size = 16, ...props }) => (
 export default function Footer() {
   const location = useLocation();
 
+  // Ne pas afficher le footer sur le Dashboard ou Admin
   if (location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/admin')) {
     return null;
   }
@@ -86,10 +87,18 @@ export default function Footer() {
         <div className="border-t border-white/5 py-8 px-6 text-center">
           <div className="flex flex-col items-center gap-3 text-[10px] md:text-xs text-zinc-600">
             <p>© {new Date().getFullYear()} TICKOFIESTA — Made for nightlife</p>
-            <Link to="/politique" className="hover:text-white transition-colors font-medium underline underline-offset-4">
-              Conditions d'utilisation & Confidentialité
-            </Link>
-            <div className="flex items-center gap-2 font-bold uppercase tracking-widest text-zinc-500 mt-2">
+            
+            {/* Liens légaux directs */}
+            <div className="flex flex-wrap justify-center gap-4 mt-2">
+              <Link to="/confidentialite" className="hover:text-white transition-colors font-medium underline underline-offset-4">
+                Confidentialité
+              </Link>
+              <Link to="/cgu" className="hover:text-white transition-colors font-medium underline underline-offset-4">
+                Conditions d'utilisation
+              </Link>
+            </div>
+
+            <div className="flex items-center gap-2 font-bold uppercase tracking-widest text-zinc-500 mt-4">
               <Sparkles size={12} className="text-amber-400"/> Abidjan • Côte d'Ivoire
             </div>
           </div>

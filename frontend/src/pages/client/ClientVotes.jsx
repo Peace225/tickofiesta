@@ -70,17 +70,20 @@ export default function ClientVotes() {
               </div>
               
               {/* BOUTON CORRIGÉ AVEC LE 'S' POUR CORRESPONDRE À APP.JSX */}
-              <button 
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  navigate(`/votes/${c.id}`); // CORRIGÉ : ajout du 's' à vote
-                }}
-                className="relative z-10 bg-[#f5a623]/10 text-[#f5a623] px-4 py-2 rounded-lg text-[10px] font-black uppercase hover:bg-[#f5a623] hover:text-white transition-all cursor-pointer"
-              >
-                Voter
-              </button>
+            
+<button 
+  type="button"
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // On s'assure que slug est bien défini
+    const targetSlug = c.slug || c.id; 
+    navigate(`/votes/${targetSlug}`); 
+  }}
+  className="relative z-10 bg-[#f5a623]/10 text-[#f5a623] px-4 py-2 rounded-lg text-[10px] font-black uppercase hover:bg-[#f5a623] hover:text-white transition-all"
+>
+  Voter
+</button>
             </div>
           ))}
         </div>

@@ -1,181 +1,234 @@
-﻿import { useEffect, useState, useCallback, useMemo } from 'react';
+﻿import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { supabase } from '../config/supabaseClient';
 import Spinner from "../components/ui/Spinner";
 import toast from 'react-hot-toast';
-import { MapPin, Zap, X, CreditCard, Trophy, TrendingUp, ArrowLeft } from 'lucide-react';
+import confetti from 'canvas-confetti'; // Import unique
+import TopSupportersModal from '../components/vote/TopSupportersModal';
+import LiveFeed from '../components/vote/LiveFeed';
+import { Zap, X, Trophy, ArrowLeft, CheckCircle2, Share2, MapPin } from 'lucide-react';
 
 const PACKS = [
-  { id: 'pack5', votes: 5, prix: 500 },
-  { id: 'pack10', votes: 10, prix: 1000 },
+  { id: 'pack5', votes: 10, prix: 700 },
   { id: 'pack60', votes: 60, prix: 3000 },
   { id: 'pack100', votes: 100, prix: 5000 },
   { id: 'pack200', votes: 200, prix: 10000 }
 ];
 
-const CreditModal = ({ isOpen, onClose, onNavigateToRecharge, pack, isProcessing, phoneNumber, setPhoneNumber, paymentMethod, setPaymentMethod }) => {
+const CreditModal = ({ isOpen, onClose, onPay, packs, selectedPack, setSelectedPack, phoneNumber, setPhoneNumber, paymentMethod, setPaymentMethod, isProcessing }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative animate-in zoom-in-95 duration-300">
-        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-indigo-600" />
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-        <div className="text-center">
-          <div className="mx-auto w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
-            <CreditCard className="text-blue-600" size={32} />
-          </div>
-          <h2 className="text-xl font-black text-slate-800 mb-2">Recharger des crédits</h2>
-          <p className="text-slate-500 text-sm mb-4">Acheter <b>{pack?.votes} votes</b> pour <b>{pack?.prix} F</b>.</p>
-          <div className="space-y-3 text-left mb-4">
-            <input type="tel" placeholder="Numéro (ex: 0700000000)" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm outline-none" />
-            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white outline-none">
-              <option value="orange">Orange Money</option>
-              <option value="mtn">MTN MoMo</option>
-              <option value="wave">Wave</option>
-              <option value="moov">Moov Money</option>
-            </select>
-          </div>
-          <button onClick={onNavigateToRecharge} disabled={isProcessing || !phoneNumber} className="w-full bg-[#0052ff] hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition-all disabled:opacity-50">
-            {isProcessing ? "Initialisation..." : "Payer maintenant"}
-          </button>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+        <h2 className="text-xl font-black text-slate-800 mb-4 text-center">Recharger des crédits</h2>
+        <div className="grid grid-cols-2 gap-2 mb-6">
+          {packs.map((pack) => (
+            <button key={pack.id} onClick={() => setSelectedPack(pack)} className={`p-3 rounded-2xl border-2 text-xs font-bold transition-all ${selectedPack.id === pack.id ? 'border-blue-600 bg-blue-50 text-blue-600 scale-[1.02]' : 'border-slate-100 hover:border-slate-200'}`}>
+              {pack.votes} votes <br/> <span className="font-black text-sm">{pack.prix} F</span>
+            </button>
+          ))}
         </div>
+        <div className="space-y-3 mb-6">
+          <input type="tel" maxLength="10" placeholder="Numéro (ex: 0700000000)" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm" />
+          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm bg-white">
+            <option value="orange">Orange Money</option>
+            <option value="mtn">MTN MoMo</option>
+            <option value="wave">Wave</option>
+          </select>
+        </div>
+        <button onClick={onPay} disabled={isProcessing} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition-all shadow-lg">
+          {isProcessing ? "Traitement..." : `Payer ${selectedPack.prix} F`}
+        </button>
       </div>
     </div>
   );
 };
 
-const getCandidatImageUrl = (candidat) => candidat?.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(candidat?.nom || 'Candidat')}&background=random&color=fff`;
-
 export default function VoteDetailPage() {
-  const { id } = useParams();
+  const { slug } = useParams();
   const navigate = useNavigate();
   const { user } = useSelector((s) => s.auth);
-
+  
   const [voteData, setVoteData] = useState(null);
   const [candidats, setCandidats] = useState([]);
-  const [resultats, setResultats] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [voting, setVoting] = useState(null);
   const [solde, setSolde] = useState(0);
+  const [loading, setLoading] = useState(true);
+  
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [supportersModalOpen, setSupportersModalOpen] = useState(false);
+  const [selectedCandidatForSupporters, setSelectedCandidatForSupporters] = useState(null);
+  
   const [selectedPack, setSelectedPack] = useState(PACKS[0]);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('orange');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const fetchSolde = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase.from('user_credits').select('balance').eq('user_id', user.id).maybeSingle();
-    if (data) setSolde(data.balance);
-  }, [user]);
+  // Fonction pour déclencher les confettis premium
+  const triggerSuccessAnimation = () => {
+    const duration = 3000;
+    const end = Date.now() + duration;
+    // Couleurs Premium TickoFiesta (Or, Violet, Cyan)
+    const colors = ['#f5a623', '#6c47ff', '#00d4aa'];
+
+    (function frame() {
+      confetti({
+        particleCount: 5,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors: colors
+      });
+      confetti({
+        particleCount: 5,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors: colors
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    }());
+  };
 
   const loadInitialData = useCallback(async () => {
     try {
-      const { data: vData } = await supabase.from('votes').select('*').eq('id', id).single();
+      const { data: vData, error: vError } = await supabase.from('votes').select('*').eq('slug', slug).single();
+      if (vError) throw vError;
       setVoteData(vData);
-      const { data: cData } = await supabase.from('candidats').select('*').eq('vote_id', id);
+      const { data: cData } = await supabase.from('candidats').select('*').eq('vote_id', vData.id);
       setCandidats(cData || []);
-      const { data: logsData } = await supabase.from('vote_logs').select('candidat_id').eq('event_id', id);
-      if (logsData) {
-        const counts = {};
-        logsData.forEach(v => counts[v.candidat_id] = (counts[v.candidat_id] || 0) + 1);
-        setResultats(Object.keys(counts).map(cid => ({ id: cid, total_votes: counts[cid] })));
+      if(user) {
+         const { data } = await supabase.from('user_credits').select('balance').eq('user_id', user.id).maybeSingle();
+         setSolde(data?.balance || 0);
       }
-      fetchSolde();
-    } catch (err) { console.error("Erreur:", err); } finally { setLoading(false); }
-  }, [id, fetchSolde]);
+    } catch (err) { console.error(err); } finally { setLoading(false); }
+  }, [slug, user]);
 
-  useEffect(() => {
-    loadInitialData();
-    const channel = supabase.channel('realtime-votes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vote_logs', filter: `event_id=eq.${id}` }, (payload) => {
-        setResultats(prev => {
-          const cid = payload.new.candidat_id;
-          const idx = prev.findIndex(r => r.id === cid);
-          if (idx !== -1) { const newRes = [...prev]; newRes[idx].total_votes += 1; return newRes; }
-          return [...prev, { id: cid, total_votes: 1 }];
-        });
-      }).subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [id, loadInitialData]);
+  useEffect(() => { loadInitialData(); }, [loadInitialData]);
 
   const handleVote = async (candidat) => {
     if (!user) return navigate('/login');
-    if (solde <= 0) { setPaymentModalOpen(true); return; }
-    setVoting(candidat.id);
-    try {
-      const { error: logErr } = await supabase.from('vote_logs').insert([{ event_id: id, candidat_id: candidat.id, user_id: user.id }]);
-      if (logErr) throw logErr;
-      await supabase.from('user_credits').update({ balance: solde - 1 }).eq('user_id', user.id);
-      setSolde(prev => prev - 1);
-      toast.success("Vote enregistré!");
-    } catch (err) { toast.error("Échec du vote"); } finally { setVoting(null); }
+    if (solde <= 0) {
+      toast.error("Crédits insuffisants. Veuillez recharger vos crédits !", {
+        position: 'top-right',
+        duration: 4000,
+      });
+      setPaymentModalOpen(true);
+      return;
+    }
+    const { error } = await supabase.from('vote_logs').insert([{ 
+      user_id: user.id, 
+      candidat_id: candidat.id,
+      is_public: true 
+    }]);
+    
+    if (error) return toast.error("Erreur de vote");
+    
+    setSolde(s => s - 1);
+    toast.success(`Vote pour ${candidat.nom} validé !`);
+    
+    // Déclenchement de l'animation de confettis !
+    triggerSuccessAnimation();
   };
 
-  const sortedCandidats = useMemo(() => [...candidats].sort((a, b) => (resultats.find(r => r.id === b.id)?.total_votes || 0) - (resultats.find(r => r.id === a.id)?.total_votes || 0)), [candidats, resultats]);
-  const maxVotes = sortedCandidats[0]?.total_votes || 1;
+  const handleShareCandidate = async (candidat) => {
+    const referralLink = user 
+      ? `${window.location.origin}/votes/${slug}?ref=${user.id}` 
+      : window.location.href;
+    const shareText = `Soutenez ${candidat.nom} !`;
+    if (navigator.share) await navigator.share({ title: 'Votez !', text: shareText, url: referralLink });
+    else { navigator.clipboard.writeText(referralLink); toast.success("Lien de parrainage copié !"); }
+  };
 
-  if (loading) return <div className="min-h-screen bg-[#f4f7fe] flex justify-center items-center"><Spinner size="xl" /></div>;
+  if (loading) return <div className="min-h-screen flex justify-center items-center"><Spinner size="xl" /></div>;
 
   return (
-    <div className="min-h-screen bg-[#f4f7fe] pb-20 relative">
-      <CreditModal isOpen={paymentModalOpen} onClose={() => setPaymentModalOpen(false)} pack={selectedPack} />
+    <div className="min-h-screen bg-[#f4f7fe] pb-20">
+      <CreditModal isOpen={paymentModalOpen} onClose={() => setPaymentModalOpen(false)} packs={PACKS} selectedPack={selectedPack} setSelectedPack={setSelectedPack} phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} onPay={() => { toast.success("Paiement initié"); setPaymentModalOpen(false); }} isProcessing={isProcessing} />
+      <TopSupportersModal isOpen={supportersModalOpen} onClose={() => setSupportersModalOpen(false)} candidat={selectedCandidatForSupporters} onSponsorClick={() => { setSupportersModalOpen(false); setPaymentModalOpen(true); }} />
 
-      <div className="fixed top-4 right-4 z-[99] bg-white px-4 py-2 rounded-full shadow-md border flex items-center gap-2">
-        <CreditCard size={14} className="text-[#0052ff]" />
-        <span className="text-xs font-black">{solde} crédits</span>
-      </div>
-
-      <header className="relative py-16 px-6 bg-[#050812] border-b border-white/5">
-        <div className="max-w-7xl mx-auto">
-          <Link to="/events" className="inline-flex items-center text-xs font-bold text-white/50 hover:text-white mb-8 transition-colors">
-            <ArrowLeft size={14} className="mr-2" /> RETOUR
+      {/* HEADER UNIFORMISÉ SELON LE DESIGN (c_2.jpg) */}
+      <header className="bg-[#0b1021] text-white pt-10 pb-14 px-4 md:px-8 border-b border-white/5">
+        <div className="max-w-7xl mx-auto w-full">
+          
+          <Link to="/votes" className="inline-flex items-center text-[10px] font-bold text-slate-400 hover:text-white mb-8 transition-colors uppercase tracking-widest">
+            <ArrowLeft size={14} className="mr-2" /> Retour
           </Link>
-          <div className="inline-flex items-center gap-2 bg-[#00d4aa]/10 text-[#00d4aa] text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-4 border border-[#00d4aa]/20">
-            <Zap size={10} /> Vote en direct
+
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+              {/* Badge Statut comme sur la maquette */}
+              <div className="inline-flex items-center gap-1.5 bg-[#00d4aa]/10 text-[#00d4aa] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 border border-[#00d4aa]/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00d4aa] animate-pulse"></span>
+                VOTES OUVERTS
+              </div>
+
+              <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase text-white">
+                {voteData?.categorie || "CONCOURS EN COURS"}
+              </h1>
+
+              {/* Localisation comme sur la maquette */}
+              <div className="flex items-center text-slate-400 text-xs font-medium mt-4 gap-1.5">
+                <MapPin size={14} className="text-slate-500" />
+                <span>Abidjan, Côte d'Ivoire</span>
+              </div>
+            </div>
+
+            {/* Bouton pour accéder au Leaderboard */}
+            <Link 
+              to={`/votes/${slug}/leaderboard`}
+              className="inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-5 py-3 rounded-xl font-bold text-xs transition-all w-full md:w-auto"
+            >
+              <Trophy size={16} className="text-yellow-400" />
+              Voir le Classement
+            </Link>
           </div>
-          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter mb-4">{voteData?.categorie || "CONCOURS"}</h1>
-          <div className="flex items-center gap-2 text-white/60 text-sm font-medium">
-            <MapPin size={14} /> {voteData?.titre || "Compétition en cours"}
-          </div>
+
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 mt-6">
+      <main className="max-w-7xl mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 grid grid-cols-2 lg:grid-cols-3 gap-4">
-            {sortedCandidats.map((c, index) => {
-              const count = resultats.find(r => r.id === c.id)?.total_votes || 0;
-              const isLeader = index === 0;
-              return (
-                <div key={c.id} className={`bg-white p-3 rounded-2xl shadow-sm border transition-all duration-500 ${isLeader ? 'border-[#ffc107] ring-2 ring-[#ffc107]/20 scale-[1.02]' : 'border-slate-100'}`}>
-                  <div className="relative mb-2">
-                    <img src={getCandidatImageUrl(c)} className="w-full aspect-square object-cover rounded-xl" onError={(e) => e.target.src = "https://ui-avatars.com/api/?name=C"} />
-                    {isLeader && <div className="absolute top-1 left-1 bg-[#ffc107] text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg uppercase animate-pulse flex items-center gap-0.5 shadow-lg"><Trophy size={8} /> CHAMPION</div>}
-                  </div>
-                  <h3 className="text-xs font-black text-slate-800 truncate">{c.nom}</h3>
-                  <p className="text-[10px] text-slate-400 font-bold mb-2">{count} votes</p>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full mb-3 overflow-hidden">
-                    <div className={`h-full transition-all duration-1000 ${isLeader ? 'bg-[#ffc107]' : 'bg-blue-500'}`} style={{ width: `${(count / maxVotes) * 100}%` }} />
-                  </div>
-                  <button onClick={() => handleVote(c)} disabled={voting === c.id} className={`w-full py-2 rounded-xl font-black text-[10px] uppercase transition-all active:scale-95 ${isLeader ? 'bg-[#ffc107] text-white' : 'bg-slate-900 text-white'}`}>
-                    {voting === c.id ? <Spinner size="sm" /> : "Voter"}
-                  </button>
-                </div>
-              );
-            })}
+          
+          <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {candidats.map((c, index) => (
+              <div key={c.id} className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative group">
+                {index === 0 && <div className="absolute -top-2 -right-2 bg-yellow-400 p-1.5 rounded-full z-10"><Trophy size={14} /></div>}
+                <img src={c.photo_url} className="w-full aspect-square object-cover rounded-xl mb-3" />
+                <button onClick={() => handleShareCandidate(c)} className="absolute top-5 left-5 bg-white/90 p-1.5 rounded-lg shadow-sm"><Share2 size={14} /></button>
+                <h3 className="font-black text-sm truncate">{c.nom}</h3>
+                <button onClick={() => { setSelectedCandidatForSupporters(c); setSupportersModalOpen(true); }} className="text-[9px] font-bold text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md mt-1 mb-2">Voir Sponsors</button>
+                <button onClick={() => handleVote(c)} className="w-full py-2 bg-slate-900 text-white font-black text-[11px] rounded-xl hover:bg-slate-800 transition-colors">VOTER</button>
+              </div>
+            ))}
           </div>
 
-          <aside className="bg-[#0052ff] rounded-3xl p-6 shadow-xl text-white h-fit lg:sticky lg:top-6">
-            <h3 className="font-bold mb-4 flex items-center gap-2"><TrendingUp size={18} /> Packs de crédits</h3>
-            <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
+          <aside className="space-y-6">
+            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Pourquoi voter ici ?</h4>
+              {['Paiement 100% sécurisé', 'Résultats transparents', '+5000 votants certifiés'].map((t, i) => (
+                <div key={i} className="flex gap-3 text-xs font-bold text-slate-600 items-center mb-3"><CheckCircle2 size={16} className="text-green-500" /> {t}</div>
+              ))}
+            </div>
+            
+            <LiveFeed voteId={voteData?.id} />
+            
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-5 text-white shadow-lg">
+              <h3 className="font-black text-sm mb-4 flex items-center gap-2"><Zap size={14} /> Packs de crédits</h3>
               {PACKS.map(pack => (
-                <button key={pack.id} onClick={() => { setSelectedPack(pack); setPaymentModalOpen(true); }} className="w-full flex justify-between bg-white/10 p-4 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all">
-                  {pack.votes} votes <span>{pack.prix} F</span>
+                <button key={pack.id} onClick={() => { setSelectedPack(pack); setPaymentModalOpen(true); }} className="w-full flex justify-between items-center bg-white/10 hover:bg-white/20 transition-colors p-3 mb-2 rounded-xl font-black text-xs">
+                  <span>{pack.votes} VOTE{pack.votes > 1 ? 'S' : ''}</span> <span>{pack.prix} F</span>
                 </button>
               ))}
             </div>
           </aside>
+          
         </div>
-      </div>
+      </main>
     </div>
   );
 }

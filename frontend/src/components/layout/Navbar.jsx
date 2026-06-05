@@ -4,10 +4,12 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logoutUser } from '../../store/slices/authSlice';
 import { toggleTheme } from '../../store/slices/themeSlice';
 import { supabase } from '../../config/supabaseClient';
+import toast from 'react-hot-toast'; // <-- Ajout de l'import toast
 import {
   Sun, Moon, LogOut, MapPin, 
   Facebook, Instagram, Store, UserCircle, 
-  Ticket, ShoppingCart, LayoutDashboard, Shield
+  Ticket, ShoppingCart, LayoutDashboard, Shield,
+  Users, Bell, Heart, UserPlus
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -69,6 +71,24 @@ export default function Navbar() {
     navigate('/');
   };
 
+  // --- NOUVELLE LOGIQUE : Clic sur l'icône communauté ---
+  const handleCommunityClick = (e) => {
+    e.preventDefault();
+    if (user) {
+      navigate('/community');
+    } else {
+      toast('Veuillez vous connecter pour rejoindre la communauté !', {
+        icon: '🔒',
+        style: {
+          borderRadius: '10px',
+          background: dark ? '#1e1e2d' : '#fff',
+          color: dark ? '#fff' : '#333',
+        },
+      });
+      navigate('/login');
+    }
+  };
+
   // On ne rend pas la Navbar client sur les espaces d'administration
   const isAdminArea = location.pathname.startsWith('/admin') || location.pathname.startsWith('/dashboard');
   if (isAdminArea) return null;
@@ -105,12 +125,31 @@ export default function Navbar() {
 
             <div className="flex items-center justify-end gap-2 md:gap-4">
               
-              {/* Le panier ne s'affiche que pour les clients */}
-              {user && role === 'client' && (
-                <Link to="/cart" className={`relative p-2 rounded-xl transition-all ${dark ? 'bg-white/5' : 'bg-slate-100'}`}>
-                  <ShoppingCart size={18} className={animate ? 'animate-bounce' : ''} />
-                </Link>
-              )}
+              {/* CONTENEUR DES ICÔNES DE NAVIGATION */}
+              <div className="flex items-center gap-1 sm:gap-2 mr-1">
+                
+                {/* 1. ICÔNE COMMUNAUTÉ : Visible par tous, protégée par le clic */}
+                <button 
+                  onClick={handleCommunityClick} 
+                  className={`p-2 rounded-full transition-all ${dark ? 'text-gray-300 hover:bg-white/10' : 'text-gray-700 hover:bg-slate-100'}`} 
+                  title="La communauté"
+                >
+                  <Users size={20} strokeWidth={2.5} />
+                </button>
+                
+                {/* 2. NOTIFICATIONS & FAVORIS : Visibles uniquement si connecté */}
+                {user && (
+                  <>
+                    <Link to="/notifications" className={`relative p-2 rounded-full transition-all ${dark ? 'text-gray-300 hover:bg-white/10' : 'text-gray-700 hover:bg-slate-100'}`} title="Notifications">
+                      <Bell size={20} strokeWidth={2.5} />
+                      <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-[#0a0a16]"></span>
+                    </Link>
+                    <Link to="/favorites" className={`p-2 rounded-full transition-all ${dark ? 'text-gray-300 hover:bg-white/10' : 'text-gray-700 hover:bg-slate-100'}`} title="Événements favoris">
+                      <Heart size={20} strokeWidth={2.5} />
+                    </Link>
+                  </>
+                )}
+              </div>
 
               <button onClick={() => dispatch(toggleTheme())} className={`p-2 rounded-xl ${dark ? 'bg-white/5' : 'bg-slate-100'}`}>
                 {dark ? <Sun size={18} /> : <Moon size={18} />}
@@ -139,8 +178,8 @@ export default function Navbar() {
                         </div>
                         <div className="p-1.5">
                           
-                          {/* ✅ LIEN CONDITIONNEL POUR L'ADMINISTRATEUR */}
-                          {role === 'admin' && (
+                          {/* 1. RÔLE : ADMINISTRATEUR */}
+                          {['admin', 'super_admin', 'superadmin'].includes(role) && (
                             <div className="pb-1 border-b mb-1 border-slate-100 dark:border-white/5">
                               <Link to="/admin" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-black text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg">
                                 <Shield size={14} /> Espace Admin
@@ -148,16 +187,31 @@ export default function Navbar() {
                             </div>
                           )}
 
-                          {/* ✅ LIEN CONDITIONNEL POUR L'ORGANISATEUR */}
+                          {/* 2. RÔLE : ORGANISATEUR */}
                           {role === 'organisateur' && (
                             <div className="pb-1 border-b mb-1 border-slate-100 dark:border-white/5">
                               <Link to="/dashboard" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-black text-[#6c47ff] hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg">
-                                <LayoutDashboard size={14} /> Dashboard
+                                <LayoutDashboard size={14} /> Espace Organisateur
                               </Link>
                             </div>
                           )}
 
-                          <Link to="/mes-billets" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-bold hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg">
+                          {/* 3. RÔLE : CLIENT */}
+                          {role === 'client' && (
+                            <div className="pb-1 border-b mb-1 border-slate-100 dark:border-white/5">
+                              <Link to="/client/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-black text-[#00d4aa] hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg mb-1">
+                                <UserCircle size={14} /> Mon Espace Client
+                              </Link>
+                              
+                              {/* BOUTON INVITER UN AMI DANS LE MENU */}
+                              <Link to="/client/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-[#6c47ff] hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-lg">
+                                <UserPlus size={14} /> Inviter un ami
+                              </Link>
+                            </div>
+                          )}
+
+                          {/* LIEN COMMUN : BILLETS */}
+                          <Link to={role === 'client' ? "/client/billets" : "/mes-billets"} onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2 text-xs font-bold hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg">
                             <Ticket size={14} /> Mes Billets
                           </Link>
                           

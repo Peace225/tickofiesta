@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 export default function StandsPage() {
   const navigate = useNavigate();
-  const dark = useSelector((s) => s?.theme?.dark)?? false;
+  const dark = useSelector((s) => s?.theme?.dark) ?? false;
 
   const [stands, setStands] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +15,8 @@ export default function StandsPage() {
   const [showModal, setShowModal] = useState(false);
   const [selectedStand, setSelectedStand] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  const [expandedDesc, setExpandedDesc] = useState({});
 
   const [formData, setFormData] = useState({
     nom: '',
@@ -52,7 +54,6 @@ export default function StandsPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      // ✅ payload 100% aligné avec ta table reservations_stands
       const { data, error } = await supabase
       .from('reservations_stands')
       .insert({
@@ -74,7 +75,6 @@ export default function StandsPage() {
       toast.success('Réservation enregistrée!');
       setShowModal(false);
 
-      // ✅ on passe tout ce dont PaiementPage a besoin
       navigate('/paiement', {
         state: {
           reservationId: data.id,
@@ -96,6 +96,10 @@ export default function StandsPage() {
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success('Lien copié!');
+  };
+
+  const toggleDesc = (id) => {
+    setExpandedDesc((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#F5F8FD]"><Loader2 className="animate-spin text-blue-600" size={32} /></div>;
@@ -172,31 +176,54 @@ export default function StandsPage() {
             </div>
           ) : (
             <div className="grid md:grid-cols-2 gap-5">
-              {filtered.map((stand) => (
-                <div key={stand.id} className="group bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-xl hover:shadow-slate-200/60 transition-all">
-                  <div className="relative h-48 overflow-hidden bg-slate-100">
-                    <img src={stand.image_url} alt={stand.nom} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur text- font-bold uppercase tracking-wider text-white">
-                      {stand.categorie}
-                    </div>
-                  </div>
-                  <div className="p-5">
-                    <h3 className="font-bold text-lg text-slate-900 mb-1">{stand.nom}</h3>
-                    <p className="text-sm text-slate-500 line-clamp-2 mb-4 min-h-">{stand.description || 'Emplacement premium pour votre activité.'}</p>
-                    <div className="flex items-center justify-between">
-                      <div className="text-lg font-black text-slate-900">
-                        {stand.prix_location?.toLocaleString()} <span className="text-sm font-medium text-slate-500">FCFA</span>
+              {filtered.map((stand) => {
+                const descText = stand.description || 'Emplacement premium pour votre activité.';
+                const isExpanded = expandedDesc[stand.id];
+                const isLongText = descText.length > 90;
+
+                return (
+                  <div key={stand.id} className="group bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-xl hover:shadow-slate-200/60 transition-all flex flex-col">
+                    <div className="relative h-48 overflow-hidden bg-slate-100 shrink-0">
+                      <img src={stand.image_url} alt={stand.nom} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur text- font-bold uppercase tracking-wider text-white">
+                        {stand.categorie}
                       </div>
-                      <button
-                        onClick={() => { setSelectedStand(stand); setShowModal(true); }}
-                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-[#2563EB] transition-colors"
-                      >
-                        Réserver
-                      </button>
+                    </div>
+                    
+                    <div className="p-5 flex flex-col flex-grow justify-between">
+                      <div>
+                        <h3 className="font-bold text-lg text-slate-900 mb-1">{stand.nom}</h3>
+                        
+                        <div className="mb-4">
+                          <p className={`text-sm text-slate-500 ${isExpanded ? '' : 'line-clamp-2'} whitespace-pre-wrap`}>
+                            {descText}
+                          </p>
+                          {isLongText && (
+                            <button
+                              onClick={() => toggleDesc(stand.id)}
+                              className="text-[#2563EB] text-xs font-bold mt-1 hover:underline focus:outline-none transition-colors"
+                            >
+                              {isExpanded ? 'Réduire' : 'Voir tout'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-auto">
+                        <div className="text-lg font-black text-slate-900">
+                          {stand.prix_location?.toLocaleString()} <span className="text-sm font-medium text-slate-500">FCFA</span>
+                        </div>
+                        <button
+                          onClick={() => { setSelectedStand(stand); setShowModal(true); }}
+                          className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-[#2563EB] transition-colors"
+                        >
+                          Réserver
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -239,26 +266,59 @@ export default function StandsPage() {
       {/* MODAL */}
       {showModal && selectedStand && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-lg font-bold text-slate-900">Réserver {selectedStand.nom}</h2>
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+              <h2 className="text-lg font-bold text-slate-900">Confirmation</h2>
               <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg transition"><X size={20} className="text-slate-500"/></button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-3.5">
-              <input required placeholder="Nom complet" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" onChange={e => setFormData({...formData, nom: e.target.value})} />
-              <input required type="tel" placeholder="Téléphone" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" onChange={e => setFormData({...formData, telephone: e.target.value})} />
-              <input type="email" placeholder="Email (optionnel)" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" onChange={e => setFormData({...formData, email: e.target.value})} />
-              <textarea placeholder="Besoins techniques..." rows="3" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] resize-none" onChange={e => setFormData({...formData, besoins_techniques: e.target.value})} />
 
-              <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
-                <input type="checkbox" required className="mt-0.5" onChange={e => setFormData({...formData, conditions: e.target.checked})} />
-                <span className="text-xs text-slate-600 leading-snug">J'accepte les conditions de réservation</span>
-              </label>
+            {/* ✅ RÉSUMÉ INTELLIGENT DU STAND (Scrollable) */}
+            <div className="p-5 bg-blue-50/40 border-b border-blue-100/50 shrink-0">
+              <div className="flex gap-4">
+                <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-200 shrink-0 shadow-sm border border-slate-200/50">
+                  <img src={selectedStand.image_url} alt={selectedStand.nom} className="w-full h-full object-cover" />
+                </div>
+                
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <h3 className="font-bold text-slate-900 text-base leading-tight truncate">{selectedStand.nom}</h3>
+                  
+                  {/* Badges */}
+                  <div className="flex flex-wrap gap-1.5 mt-2 mb-2">
+                    <span className="text-[10px] font-bold uppercase text-[#2563EB] bg-blue-100/80 px-2 py-0.5 rounded border border-blue-200/50">
+                      {selectedStand.categorie}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200/50">
+                      {selectedStand.prix_location > 0 ? `${selectedStand.prix_location.toLocaleString()} FCFA` : 'GRATUIT'}
+                    </span>
+                  </div>
 
-              <button disabled={submitting} className="w-full py-3.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl font-semibold text-sm mt-2 disabled:opacity-60 transition">
-                {submitting? 'Traitement...' : `Continuer vers paiement • ${selectedStand.prix_location?.toLocaleString()} FCFA`}
-              </button>
-            </form>
+                  {/* Description défilable pour tout afficher sans casser la modale */}
+                  <div className="flex-1 max-h-[48px] overflow-y-auto pr-2 text-xs text-slate-600 font-medium leading-relaxed" 
+                       style={{ scrollbarWidth: 'thin' }}>
+                    {selectedStand.description || 'Emplacement premium pour votre activité.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+              <form onSubmit={handleSubmit} className="p-6 space-y-3.5">
+                <input required placeholder="Nom complet" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" onChange={e => setFormData({...formData, nom: e.target.value})} />
+                <input required type="tel" placeholder="Téléphone" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" onChange={e => setFormData({...formData, telephone: e.target.value})} />
+                <input type="email" placeholder="Email (optionnel)" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB]" onChange={e => setFormData({...formData, email: e.target.value})} />
+                <textarea placeholder="Besoins techniques..." rows="3" className="w-full px-4 py-3 bg-[#F8FAFC] rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20 focus:border-[#2563EB] resize-none" onChange={e => setFormData({...formData, besoins_techniques: e.target.value})} />
+
+                <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
+                  <input type="checkbox" required className="mt-0.5" onChange={e => setFormData({...formData, conditions: e.target.checked})} />
+                  <span className="text-xs text-slate-600 leading-snug">J'accepte les conditions de réservation</span>
+                </label>
+
+                <button disabled={submitting} className="w-full py-3.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl font-semibold text-sm mt-2 disabled:opacity-60 transition">
+                  {submitting? 'Traitement...' : `Continuer vers paiement • ${selectedStand.prix_location?.toLocaleString()} FCFA`}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}

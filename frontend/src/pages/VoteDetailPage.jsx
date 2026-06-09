@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
 import TopSupportersModal from '../components/vote/TopSupportersModal';
 import LiveFeed from '../components/vote/LiveFeed';
-import { Zap, X, Trophy, ArrowLeft, CheckCircle2, Share2, MapPin } from 'lucide-react';
+import { Zap, X, Trophy, ArrowLeft, Share2, MapPin } from 'lucide-react';
 
 const PACKS = [
   { id: 'pack5', votes: 10, prix: 700 },
@@ -64,6 +64,8 @@ export default function VoteDetailPage() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('orange');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   const triggerSuccessAnimation = useCallback(() => {
     const duration = 3000;
@@ -138,7 +140,6 @@ export default function VoteDetailPage() {
     };
   }, [user, triggerSuccessAnimation]); 
 
-  // --- NOUVELLE LOGIQUE DE VOTE ---
   const handleVote = async (candidat) => {
     if (!user) return navigate('/login');
     
@@ -150,7 +151,6 @@ export default function VoteDetailPage() {
 
     const creditsRestants = solde - 1;
     
-    // MAJ optimiste
     setSolde(creditsRestants);
     triggerSuccessAnimation();
 
@@ -188,7 +188,7 @@ export default function VoteDetailPage() {
     else { navigator.clipboard.writeText(referralLink); toast.success("Lien de parrainage copié !"); }
   };
 
-const handlePayment = async () => {
+  const handlePayment = async () => {
     if (!phoneNumber || phoneNumber.length < 8) {
       toast.error("Veuillez entrer un numéro de téléphone valide.");
       return;
@@ -203,7 +203,6 @@ const handlePayment = async () => {
           phone_number: phoneNumber, 
           description: `Achat de ${selectedPack.votes} votes`, 
           userId: user?.id,
-          // 👇 C'EST CETTE PARTIE QUI VA SAUVER TON SYSTÈME 👇
           metadata: {
             pack_id: selectedPack.id,
             votes_to_credit: selectedPack.votes 
@@ -235,6 +234,12 @@ const handlePayment = async () => {
 
   if (loading) return <div className="min-h-screen flex justify-center items-center"><Spinner size="xl" /></div>;
 
+  const descriptionText = voteData?.description;
+  const isLongDescription = descriptionText && descriptionText.length > 150;
+  const displayDescription = isLongDescription && !isDescExpanded 
+    ? descriptionText.substring(0, 150) + '...' 
+    : descriptionText;
+
   return (
     <div className="min-h-screen bg-[#f4f7fe] pb-20">
 
@@ -252,6 +257,14 @@ const handlePayment = async () => {
           isProcessing={isProcessing} 
       />
 
+      {supportersModalOpen && selectedCandidatForSupporters && (
+         <TopSupportersModal 
+            isOpen={supportersModalOpen}
+            onClose={() => setSupportersModalOpen(false)}
+            candidatId={selectedCandidatForSupporters.id}
+         />
+      )}
+
       <header className="bg-[#0b1021] text-white pt-10 pb-14 px-4 md:px-8 border-b border-white/5">
         <div className="max-w-7xl mx-auto w-full">
           
@@ -259,25 +272,42 @@ const handlePayment = async () => {
             <ArrowLeft size={14} className="mr-2" /> Retour
           </Link>
 
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
-              <div className="inline-flex items-center gap-1.5 bg-[#00d4aa]/10 text-[#00d4aa] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 border border-[#00d4aa]/20">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+            <div className="max-w-3xl">
+              
+              <div className="inline-flex items-center gap-1.5 bg-[#00d4aa]/10 text-[#00d4aa] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3 border border-[#00d4aa]/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00d4aa] animate-pulse"></span>
-                VOTES OUVERTS
+                {voteData?.category || "VOTES OUVERTS"}
               </div>
 
-              <h1 className="text-3xl md:text-5xl font-black tracking-tighter uppercase text-white">
-                {voteData?.categorie || "CONCOURS EN COURS"}
+              {/* ✅ TITRE AJUSTÉ ICI */}
+              <h1 className="text-2xl md:text-3xl lg:text-4xl font-black tracking-tight uppercase text-white leading-tight mb-4">
+                {voteData?.title || "CONCOURS EN COURS"}
               </h1>
 
-              <div className="flex items-center text-slate-400 text-xs font-medium mt-4 gap-1.5">
+              <div className="flex items-center text-slate-400 text-xs font-medium gap-1.5 mb-4">
                 <MapPin size={14} className="text-slate-500" />
                 <span>Abidjan, Côte d'Ivoire</span>
               </div>
+
+              {descriptionText && (
+                <div className="border-l-2 border-[#00d4aa] pl-4">
+                  <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap transition-all">
+                    {displayDescription}
+                  </p>
+                  {isLongDescription && (
+                    <button 
+                      onClick={() => setIsDescExpanded(!isDescExpanded)}
+                      className="text-[#00d4aa] text-xs font-bold mt-2 hover:underline focus:outline-none transition-colors"
+                    >
+                      {isDescExpanded ? 'Voir moins' : 'Voir tout'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* --- NOUVEAUX BOUTONS DROITE --- */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
               {user && (
                 <div className="flex items-center gap-2 bg-[#00d4aa]/10 border border-[#00d4aa]/30 text-[#00d4aa] px-5 py-3 rounded-xl font-black text-sm w-full justify-center sm:w-auto shadow-[0_0_15px_rgba(0,212,170,0.15)]">
                   <Zap size={16} className={solde > 0 ? "animate-pulse" : "opacity-50"} />
@@ -315,13 +345,6 @@ const handlePayment = async () => {
           </div>
 
           <aside className="space-y-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Pourquoi voter ici ?</h4>
-              {['Paiement 100% sécurisé', 'Résultats transparents', '+5000 votants certifiés'].map((t, i) => (
-                <div key={i} className="flex gap-3 text-xs font-bold text-slate-600 items-center mb-3"><CheckCircle2 size={16} className="text-green-500" /> {t}</div>
-              ))}
-            </div>
-            
             <LiveFeed voteId={voteData?.id} />
             
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-5 text-white shadow-lg">

@@ -156,7 +156,8 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, type: "tickets", count: inserted.length }), { headers: corsHeaders })
 
-  } catch (e) {
+  // 🚨 CORRECTION ICI : Ajout de ": any" pour corriger l'erreur TypeScript
+  } catch (e: any) {
     console.error(e)
     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders })
   }

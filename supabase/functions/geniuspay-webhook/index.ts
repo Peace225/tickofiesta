@@ -24,42 +24,74 @@ serve(async (req) => {
 
     const data = body.data || body
     
-    // 1. Récupération intelligente des métadonnées (gère la structure de GeniusPay)
+    // Récupération des métadonnées envoyées par GeniusPay
     const metadata = data.metadata || body.metadata || {}
-    const user_id = data.user_id || metadata.userId
-    
-    if (!user_id) throw new Error("user_id manquant")
+    const user_id = data.user_id || metadata.userId // Peut être null si invité (guest)
+    const is_guest = metadata.is_guest === true || metadata.is_guest === 'true'
 
     // ==========================================================
-    // SCÉNARIO A : ACHAT DE CRÉDITS DE VOTE
+    // SCÉNARIO A : ACHAT DE CRÉDITS DE VOTE / VOTE DIRECT
     // ==========================================================
     if (metadata.votes_to_credit) {
       const votesToAdd = parseInt(metadata.votes_to_credit, 10)
+      const candidat_id = metadata.candidat_id
+
+      // ----------------------------------------------------
+      // CAS A.1 : ACHAT DIRECT POUR UN CANDIDAT (Score immédiat)
+      // ----------------------------------------------------
+      if (candidat_id) {
+        console.log(`✅ Achat direct: Attribution de ${votesToAdd} votes au candidat ${candidat_id} (Invité: ${is_guest})`)
+        
+        // Création du tableau de votes pour déclencher le trigger SQL qui fera +X au score
+        const logsToInsert = Array.from({ length: votesToAdd }).map(() => ({
+          user_id: user_id || null, 
+          candidat_id: candidat_id,
+          is_public: true
+        }))
+
+        const { error: logsError } = await supabase
+          .from('vote_logs')
+          .insert(logsToInsert)
+
+        if (logsError) throw logsError
+
+        return new Response(JSON.stringify({ success: true, type: "direct_vote", votes_added: votesToAdd }), { headers: corsHeaders })
+      } 
       
-      // On récupère le solde actuel de l'utilisateur
-      const { data: userCredit, error: fetchError } = await supabase
-        .from('user_credits')
-        .select('balance')
-        .eq('user_id', user_id)
-        .maybeSingle() // maybeSingle évite une erreur si l'utilisateur n'a pas encore de ligne
+      // ----------------------------------------------------
+      // CAS A.2 : RECHARGE GLOBALE DU COMPTE UTILISATEUR
+      // ----------------------------------------------------
+      else {
+        if (!user_id || is_guest) {
+           throw new Error("Impossible de recharger un compte global sans être connecté (user_id manquant).")
+        }
 
-      const currentBalance = userCredit?.balance || 0
-      const newBalance = currentBalance + votesToAdd
+        console.log(`✅ Recharge globale: Ajout de ${votesToAdd} crédits au compte ${user_id}.`)
+        
+        const { data: userCredit, error: fetchError } = await supabase
+          .from('user_credits')
+          .select('balance')
+          .eq('user_id', user_id)
+          .maybeSingle()
 
-      // On met à jour (ou on crée) la ligne avec le nouveau solde
-      const { error: upsertError } = await supabase
-        .from('user_credits')
-        .upsert({ user_id: user_id, balance: newBalance })
+        const currentBalance = userCredit?.balance || 0
+        const newBalance = currentBalance + votesToAdd
 
-      if (upsertError) throw upsertError
+        const { error: upsertError } = await supabase
+          .from('user_credits')
+          .upsert({ user_id: user_id, balance: newBalance })
 
-      console.log(`✅ Succès: ${votesToAdd} crédits ajoutés pour l'utilisateur ${user_id}.`)
-      return new Response(JSON.stringify({ success: true, type: "votes", balance: newBalance }), { headers: corsHeaders })
+        if (upsertError) throw upsertError
+
+        return new Response(JSON.stringify({ success: true, type: "global_credits", balance: newBalance }), { headers: corsHeaders })
+      }
     }
 
     // ==========================================================
-    // SCÉNARIO B : ACHAT DE BILLETS D'ÉVÉNEMENT (Ton code d'origine)
+    // SCÉNARIO B : ACHAT DE BILLETS D'ÉVÉNEMENT
     // ==========================================================
+    if (!user_id) throw new Error("user_id manquant pour l'achat de billets")
+
     const { purchase_id, order_id, tickets } = data
     const pid = purchase_id || order_id
     
@@ -76,7 +108,7 @@ serve(async (req) => {
         billets.push({
           purchase_id: pid,
           ticket_type_id: t.ticket_type_id,
-          user_id: user_id, // Utilisation du user_id consolidé
+          user_id: user_id,
           scanned: false,
           status: 'valide',
           qr_code: `TKF-${pid}-${crypto.randomUUID().slice(0,8)}`

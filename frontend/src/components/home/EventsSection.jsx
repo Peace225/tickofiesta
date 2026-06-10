@@ -18,7 +18,7 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
 
   const [user, setUser] = useState(null);
   const [following, setFollowing] = useState([]); 
-  const [userFavorites, setUserFavorites] = useState([]); // <-- NOUVEAU: Stocke les favoris de l'utilisateur
+  const [userFavorites, setUserFavorites] = useState([]); 
 
   const PAGE_SIZE = 8; 
 
@@ -43,6 +43,31 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
     return { dateStr, heureStr: `${h}h${m}` };
   };
 
+  // ✅ LOGIQUE CANDIDATS (J'aime / Likes)
+  const handleLikeCandidat = async (candidat) => {
+    setActiveCandidats(prev => prev.map(c => 
+      c.id === candidat.id ? { ...c, likes: (c.likes || 0) + 1 } : c
+    ));
+
+    try {
+      const { data } = await supabase.from('candidats').select('likes').eq('id', candidat.id).single();
+      const currentLikes = data?.likes || 0;
+
+      const { error } = await supabase
+        .from('candidats')
+        .update({ likes: currentLikes + 1 })
+        .eq('id', candidat.id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Erreur lors de l'ajout du J'aime:", err);
+      setActiveCandidats(prev => prev.map(c => 
+        c.id === candidat.id ? { ...c, likes: Math.max(0, (c.likes || 0) - 1) } : c
+      ));
+    }
+  };
+
+  // ✅ LOGIQUE ABONNEMENTS
   const toggleFollow = async (organisateurId) => {
     if (!user) {
       toast.custom((t) => (
@@ -59,66 +84,34 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
                 </div>
               </div>
               <div className="flex-1">
-                <p className="text-[13px] font-black text-gray-900 uppercase tracking-wide">
-                  Connexion requise
-                </p>
-                <p className="mt-1 text-[11px] text-gray-500 font-medium leading-relaxed">
-                  Connectez-vous pour suivre cet organisateur et ne rater aucun de ses prochains événements !
-                </p>
+                <p className="text-[13px] font-black text-gray-900 uppercase tracking-wide">Connexion requise</p>
+                <p className="mt-1 text-[11px] text-gray-500 font-medium leading-relaxed">Connectez-vous pour suivre cet organisateur !</p>
                 <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => {
-                      toast.dismiss(t.id);
-                      navigate('/login');
-                    }}
-                    className="bg-[#e65c00] hover:bg-orange-600 text-white px-4 py-1.5 rounded-lg text-[11px] font-bold transition-colors shadow-sm"
-                  >
-                    Se connecter
-                  </button>
-                  <button
-                    onClick={() => toast.dismiss(t.id)}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
-                  >
-                    Plus tard
-                  </button>
+                  <button onClick={() => { toast.dismiss(t.id); navigate('/login'); }} className="bg-[#e65c00] hover:bg-orange-600 text-white px-4 py-1.5 rounded-lg text-[11px] font-bold shadow-sm">Se connecter</button>
+                  <button onClick={() => toast.dismiss(t.id)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-1.5 rounded-lg text-[11px] font-bold">Plus tard</button>
                 </div>
               </div>
             </div>
           </div>
           <div className="flex border-l border-gray-100">
-            <button
-              onClick={() => toast.dismiss(t.id)}
-              className="w-full border border-transparent rounded-none rounded-r-2xl p-4 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              <X size={16} />
-            </button>
+            <button onClick={() => toast.dismiss(t.id)} className="w-full border border-transparent rounded-r-2xl p-4 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50"><X size={16} /></button>
           </div>
         </div>
       ), { duration: 5000, position: 'top-center' });
-      
       return;
     }
     
     if (!organisateurId) return;
-
     const isSubscribed = following.includes(organisateurId);
 
     if (isSubscribed) {
       setFollowing(prev => prev.filter(id => id !== organisateurId));
       toast.success("Abonnement annulé", { icon: '👋' });
-      
-      await supabase
-        .from('abonnements')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('organisateur_id', organisateurId);
+      await supabase.from('abonnements').delete().eq('user_id', user.id).eq('organisateur_id', organisateurId);
     } else {
       setFollowing(prev => [...prev, organisateurId]);
       toast.success("Vous êtes maintenant abonné !", { icon: '✅' });
-      
-      await supabase
-        .from('abonnements')
-        .insert({ user_id: user.id, organisateur_id: organisateurId });
+      await supabase.from('abonnements').insert({ user_id: user.id, organisateur_id: organisateurId });
     }
   };
 
@@ -129,57 +122,43 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
       if (session?.user) {
         setUser(session.user);
         
-        // 1. Charger les abonnements
-        const { data: abonnementsData } = await supabase
-          .from('abonnements')
-          .select('organisateur_id')
-          .eq('user_id', session.user.id);
-          
-        if (abonnementsData) {
-          setFollowing(abonnementsData.map(a => a.organisateur_id));
-        }
+        const { data: abonnementsData } = await supabase.from('abonnements').select('organisateur_id').eq('user_id', session.user.id);
+        if (abonnementsData) setFollowing(abonnementsData.map(a => a.organisateur_id));
 
-        // 2. Charger les favoris existants (NOUVEAU)
-        const { data: favorisData } = await supabase
-          .from('favorites')
-          .select('event_id')
-          .eq('user_id', session.user.id);
-
-        if (favorisData) {
-          setUserFavorites(favorisData.map(f => f.event_id));
-        }
+        const { data: favorisData } = await supabase.from('favorites').select('event_id').eq('user_id', session.user.id);
+        if (favorisData) setUserFavorites(favorisData.map(f => f.event_id));
       }
 
       const now = new Date().toISOString();
 
+      // ✅ VRAIS LIKES D'ÉVÉNEMENTS (favorites)
       const { data: resEvents, error: evError } = await supabase
         .from('events')
-        .select('*, profiles(full_name, nom)') 
-        .eq('statut', 'validé')
+        .select('*, profiles(full_name, nom), favorites(count)') 
+        .eq('statut', 'validé') 
         .gte('date', now)
         .order('date', { ascending: true });
 
-      if (evError) console.error("Erreur events:", evError);
+      if (evError) console.error("Erreur events:", evError.message);
 
-      const eventsWithSocialProof = (resEvents || []).map(ev => ({
+      // Extraction du compteur réel pour le passer facilement au composant EventCard
+      const formattedEvents = (resEvents || []).map(ev => ({
         ...ev,
-        fakeLikes: Math.floor(Math.random() * 150) + 5 
+        likes_count: ev.favorites?.[0]?.count || 0
       }));
 
-      setFeaturedEvents(eventsWithSocialProof.slice(0, 4));
-      setEvents(eventsWithSocialProof.slice(4));
+      setFeaturedEvents(formattedEvents.slice(0, 4));
+      setEvents(formattedEvents.slice(4));
 
-      // AJOUT DU SLUG DANS LA REQUÊTE DES VOTES
-      const { data: resCandidats } = await supabase
+      // ✅ VRAIS VOTES ET LIKES CANDIDATS
+      const { data: resCandidats, error: candError } = await supabase
         .from('candidats')
-        .select('id, vote_id, nom, photo_url, photo_path, numero, votes(title, slug)')
+        .select('id, vote_id, nom, photo_url, photo_path, numero, score, likes, votes(title, slug)')
         .order('numero', { ascending: true }) 
         .limit(25);
 
-      setActiveCandidats((resCandidats || []).map(c => ({
-        ...c,
-        fakeSoutiens: Math.floor(Math.random() * 800) + 120 
-      })));
+      if (candError) console.error("Erreur candidats:", candError.message);
+      setActiveCandidats(resCandidats || []);
 
     } catch (err) {
       console.error(err);
@@ -190,16 +169,49 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
 
   useEffect(() => {
     fetchData(true);
+
+    // 🔥 TEMPS RÉEL : CANDIDATS (Scores & Likes)
+    const candidatsSubscription = supabase.channel('public:candidats')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'candidats' }, (payload) => {
+        setActiveCandidats(currentCandidats => 
+          currentCandidats.map(candidat => 
+            candidat.id === payload.new.id 
+              ? { ...candidat, score: payload.new.score, likes: payload.new.likes } 
+              : candidat
+          )
+        );
+      })
+      .subscribe();
+
+    // 🔥 TEMPS RÉEL : ÉVÉNEMENTS (Likes)
+    const favoritesSubscription = supabase.channel('realtime:favorites_count')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'favorites' }, (payload) => {
+        const updateEventLikes = (list) => list.map(ev => {
+          if (payload.eventType === 'INSERT' && ev.id === payload.new.event_id) {
+            return { ...ev, likes_count: (ev.likes_count || 0) + 1 };
+          }
+          if (payload.eventType === 'DELETE' && ev.id === payload.old.event_id) {
+            return { ...ev, likes_count: Math.max(0, (ev.likes_count || 0) - 1) };
+          }
+          return ev;
+        });
+
+        setEvents(prev => updateEventLikes(prev));
+        setFeaturedEvents(prev => updateEventLikes(prev));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(candidatsSubscription);
+      supabase.removeChannel(favoritesSubscription);
+    };
   }, [fetchData]);
 
   const filteredData = useMemo(() => {
     let results = events;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      results = results.filter(i => 
-        i.titre?.toLowerCase().includes(q) || 
-        i.lieu?.toLowerCase().includes(q)
-      );
+      results = results.filter(i => i.titre?.toLowerCase().includes(q) || i.lieu?.toLowerCase().includes(q));
     }
     return results;
   }, [events, searchQuery]);
@@ -209,26 +221,23 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
 
   const EventCard = ({ item }) => {
     const { dateStr, heureStr } = extractDateAndTime(item.date);
-    
     const organisateurNom = item.profiles?.full_name || item.profiles?.nom || 'Organisateur inconnu';
     const orgId = item.organisateur_id;
     
     const isSubscribed = following.includes(orgId);
     const isInitiallyLiked = userFavorites.includes(item.id);
 
-    // États locaux
     const [isLiked, setIsLiked] = useState(isInitiallyLiked);
-    const [likesCount, setLikesCount] = useState(item.fakeLikes + (isInitiallyLiked ? 1 : 0));
+    const [likesCount, setLikesCount] = useState(item.likes_count || 0);
     const [isProcessingLike, setIsProcessingLike] = useState(false);
 
-    // Mettre à jour si les favoris de l'utilisateur changent en arrière-plan
-    useEffect(() => {
-      setIsLiked(isInitiallyLiked);
-    }, [isInitiallyLiked]);
+    useEffect(() => { setIsLiked(isInitiallyLiked); }, [isInitiallyLiked]);
+    
+    // Sync avec les mises à jour en temps réel
+    useEffect(() => { setLikesCount(item.likes_count || 0); }, [item.likes_count]);
 
     const handleLike = async (e) => {
       e.preventDefault(); 
-      
       if (!user) {
         toast.error("Connectez-vous pour ajouter aux favoris", { icon: '🔒' });
         navigate('/login');
@@ -239,45 +248,22 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
       setIsProcessingLike(true);
 
       const previousLikedState = isLiked;
-      
-      // MISE À JOUR VISUELLE INSTANTANÉE (+1 / -1)
       setIsLiked(!previousLikedState);
-      setLikesCount(prev => previousLikedState ? prev - 1 : prev + 1);
+      setLikesCount(prev => previousLikedState ? Math.max(0, prev - 1) : prev + 1);
 
       try {
         if (!previousLikedState) {
-          // Ajout en BDD
-          const { error: favError } = await supabase
-            .from('favorites')
-            .insert({ user_id: user.id, event_id: item.id });
-
-          if (favError) throw favError;
-
-          // Abonnement automatique à l'organisateur
+          await supabase.from('favorites').insert({ user_id: user.id, event_id: item.id });
           if (orgId && !isSubscribed) {
-            const { error: subError } = await supabase
-              .from('abonnements')
-              .insert({ user_id: user.id, organisateur_id: orgId });
-            
-            if (!subError) {
-              setFollowing(prev => [...prev, orgId]);
-            }
+            const { error: subError } = await supabase.from('abonnements').insert({ user_id: user.id, organisateur_id: orgId });
+            if (!subError) setFollowing(prev => [...prev, orgId]);
           }
         } else {
-          // Suppression en BDD
-          const { error } = await supabase
-            .from('favorites')
-            .delete()
-            .eq('user_id', user.id)
-            .eq('event_id', item.id);
-
-          if (error) throw error;
+          await supabase.from('favorites').delete().eq('user_id', user.id).eq('event_id', item.id);
         }
       } catch (error) {
-        // En cas d'erreur de la BDD, on annule l'effet visuel
         setIsLiked(previousLikedState);
-        setLikesCount(prev => previousLikedState ? prev + 1 : prev - 1);
-        console.error("Erreur favoris:", error);
+        setLikesCount(prev => previousLikedState ? prev + 1 : Math.max(0, prev - 1));
         toast.error("Action impossible");
       } finally {
         setIsProcessingLike(false);
@@ -302,19 +288,9 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
         <div className="p-4 flex flex-col flex-1">
           <div className="flex justify-between items-start gap-3 mb-3">
             <h3 className="font-bold text-[14px] text-gray-800 line-clamp-2 leading-tight uppercase flex-1">{item.titre}</h3>
-            {/* BOUTON J'AIME CONNECTÉ */}
-            <button 
-              onClick={handleLike}
-              disabled={isProcessingLike}
-              className="flex flex-col items-center shrink-0 cursor-pointer group disabled:opacity-50"
-            >
-              <Heart 
-                size={20} 
-                className={`transition-all duration-300 ${isLiked ? 'text-red-500 fill-red-500 scale-110' : 'text-gray-700 group-hover:text-red-500 group-hover:scale-110'}`} 
-              />
-              <span className={`text-[11px] font-medium transition-colors ${isLiked ? 'text-red-500' : 'text-gray-600'}`}>
-                {likesCount}
-              </span>
+            <button onClick={handleLike} disabled={isProcessingLike} className="flex flex-col items-center shrink-0 cursor-pointer group disabled:opacity-50">
+              <Heart size={20} className={`transition-all duration-300 ${isLiked ? 'text-red-500 fill-red-500 scale-110' : 'text-gray-700 group-hover:text-red-500 group-hover:scale-110'}`} />
+              <span className={`text-[11px] font-medium transition-colors ${isLiked ? 'text-red-500' : 'text-gray-600'}`}>{likesCount}</span>
             </button>
           </div>
 
@@ -339,34 +315,15 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
 
           <div className="mt-auto border-t border-gray-200 pt-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 overflow-hidden">
-              <div className="w-8 h-8 rounded-full bg-[#ef4444] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                {getInitials(organisateurNom)}
-              </div>
+              <div className="w-8 h-8 rounded-full bg-[#ef4444] text-white flex items-center justify-center text-[10px] font-bold shrink-0">{getInitials(organisateurNom)}</div>
               <div className="flex flex-col min-w-0">
                 <span className="text-[9px] text-gray-400 leading-tight">Publié par</span>
-                <span className="text-[11px] font-bold text-gray-800 truncate">
-                  {organisateurNom}
-                </span>
+                <span className="text-[11px] font-bold text-gray-800 truncate">{organisateurNom}</span>
               </div>
             </div>
-            
             {orgId && (
-              <button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  toggleFollow(orgId);
-                }}
-                className={`text-[10px] font-medium px-3 py-1.5 rounded-full shrink-0 transition-colors flex items-center gap-1 ${
-                  isSubscribed 
-                    ? 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-red-50' 
-                    : 'bg-[#1f2937] text-white hover:bg-black'
-                }`}
-              >
-                {isSubscribed ? (
-                  <><Check size={12} className="text-green-600" /> Abonné</>
-                ) : (
-                  "S'abonner"
-                )}
+              <button onClick={(e) => { e.preventDefault(); toggleFollow(orgId); }} className={`text-[10px] font-medium px-3 py-1.5 rounded-full shrink-0 transition-colors flex items-center gap-1 ${isSubscribed ? 'bg-gray-100 text-gray-800 border border-gray-200 hover:bg-red-50' : 'bg-[#1f2937] text-white hover:bg-black'}`}>
+                {isSubscribed ? <><Check size={12} className="text-green-600" /> Abonné</> : "S'abonner"}
               </button>
             )}
           </div>
@@ -378,21 +335,17 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
   return (
     <section ref={eventsRef} className={`py-8 md:py-12 transition-all duration-1000 ${eventsInView ? "opacity-100" : "opacity-0"} bg-gray-100`}>
       <div className="max-w-[1400px] mx-auto px-2 md:px-6">
-        
         <div className="bg-white rounded-t-2xl md:rounded-[24px] shadow-2xl overflow-hidden border border-gray-200">
           
           <div className="bg-[#e65c00] text-white py-4 px-4 md:px-8 flex items-center overflow-hidden relative">
             <Zap className="fill-white mr-3 shrink-0" size={24} />
-            <h2 className="text-xl md:text-2xl font-black italic tracking-wide shrink-0">
-              TOP ÉVÉNEMENTS TICKOFIESTA
-            </h2>
+            <h2 className="text-xl md:text-2xl font-black italic tracking-wide shrink-0">TOP ÉVÉNEMENTS TICKOFIESTA</h2>
             <div className="ml-6 flex-1 whitespace-nowrap overflow-hidden text-[10px] md:text-xs font-bold italic opacity-90 uppercase tracking-widest hidden md:block">
               — DÉCOUVREZ LES MEILLEURS ÉVÉNEMENTS — RÉSERVATIONS INSTANTANÉES 🔥
             </div>
           </div>
 
           <div className="p-4 md:p-8">
-            
             <div className="flex justify-center mb-10">
               <div className="flex flex-wrap justify-center gap-2 p-1.5 rounded-xl bg-gray-50 border border-gray-200">
                 {[
@@ -410,7 +363,6 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
 
             {loading ? <div className="flex justify-center py-20"><Spinner size="lg" color="#e65c00" /></div> : (
               <>
-                {/* SECTION CANDIDATS */}
                 {activeCandidats.length > 0 && (
                   <div className="mb-12 bg-purple-50/50 p-4 md:p-6 rounded-2xl border border-purple-100">
                     <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 mb-5">
@@ -419,16 +371,12 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500"></span>
                         </div>
-                        <h3 className="font-black text-sm md:text-base uppercase text-gray-900 tracking-wider">
-                          En direct : Candidats en lice
-                        </h3>
+                        <h3 className="font-black text-sm md:text-base uppercase text-gray-900 tracking-wider">En direct : Candidats en lice</h3>
                       </div>
                       <span className="hidden md:block text-purple-300 font-bold">|</span>
                       <div className="inline-flex items-center gap-1.5 text-xs md:text-sm font-bold text-purple-700 bg-purple-100 px-3 py-1 rounded-md w-fit shadow-sm">
                         <Trophy size={14} className="text-purple-600" />
-                        {Array.isArray(activeCandidats[0]?.votes) 
-                          ? activeCandidats[0]?.votes[0]?.title 
-                          : activeCandidats[0]?.votes?.title || "Compétitions actives"}
+                        {Array.isArray(activeCandidats[0]?.votes) ? activeCandidats[0]?.votes[0]?.title : activeCandidats[0]?.votes?.title || "Compétitions actives"}
                       </div>
                     </div>
                     
@@ -446,14 +394,26 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
                               <p className="text-[9px] text-gray-500 font-medium line-clamp-1 mb-1.5 flex items-center gap-1">
                                 <Trophy size={10} className="text-yellow-500 shrink-0" /> {nomConcours || "Compétition en cours"}
                               </p>
-                              <div className="flex items-center gap-2 mb-2">
+                              
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
                                 <div className="flex items-center gap-1 text-[9px] font-black text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-md border border-purple-100">
                                   <Hash size={10} /> N° {candidat.numero || '-'}
                                 </div>
-                                <div className="flex items-center gap-1 text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100">
-                                  <Heart size={10} className="fill-rose-500" /> {candidat.fakeSoutiens}
+                                
+                                <button 
+                                  onClick={(e) => { e.preventDefault(); handleLikeCandidat(candidat); }}
+                                  className="flex items-center gap-1 text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100 hover:bg-rose-100 active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <Heart size={10} className="fill-rose-500 shrink-0" /> 
+                                  <span>{candidat.likes || 0}</span>
+                                </button>
+
+                                <div className="flex items-center gap-1 text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100" title="Nombre de votes officiels">
+                                  <Star size={10} className="fill-blue-500 shrink-0" /> 
+                                  <span>Score: {candidat.score || 0}</span>
                                 </div>
                               </div>
+
                               <Link to={`/votes/${slugConcours || candidat.vote_id}`} className="block text-center bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold uppercase py-1.5 rounded-lg transition-colors">Voter</Link>
                             </div>
                           </div>
@@ -463,7 +423,6 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
                   </div>
                 )}
 
-                {/* SECTION A LA UNE */}
                 {featuredEvents.length > 0 && (
                   <div className="mb-12">
                     <div className="flex items-center gap-2 mb-5">
@@ -476,7 +435,6 @@ export default function EventsSection({ eventsRef, eventsInView, searchQuery }) 
                   </div>
                 )}
 
-                {/* SECTION TOUS LES ÉVÉNEMENTS */}
                 <div>
                   <div className="flex items-center gap-2 mb-5 border-t border-gray-100 pt-8">
                     <Calendar className="text-gray-400" size={20} />

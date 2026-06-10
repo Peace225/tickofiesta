@@ -17,12 +17,11 @@ export default function LiveFeed({ voteId }) {
   };
 
   useEffect(() => {
-    // 1. Récupération initiale - Modifiée pour retirer is_public et message
+    // 1. Récupération initiale - CORRIGÉE avec full_name
     const fetchRecent = async () => {
-      // Construction de la requête de base
       let query = supabase
         .from('vote_logs')
-        .select(`id, created_at, profiles(nom), candidats(nom)`)
+        .select(`id, created_at, profiles(full_name), candidats(nom)`) // 👈 Correction ici
         .order('created_at', { ascending: false })
         .limit(5);
 
@@ -35,7 +34,7 @@ export default function LiveFeed({ voteId }) {
       const { data, error } = await query;
       
       if (error) {
-        console.error("Erreur LiveFeed:", error);
+        console.error("Erreur LiveFeed:", error.message);
       } else if (data) {
         setFeed(data);
       }
@@ -47,10 +46,10 @@ export default function LiveFeed({ voteId }) {
     const channel = supabase.channel('realtime:vote_logs')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vote_logs' }, async (payload) => {
         
-        // CORRECTION : On récupère juste le nouveau vote avec ses relations
+        // CORRECTION : On récupère juste le nouveau vote avec ses relations (avec full_name)
         const { data: newRow } = await supabase
           .from('vote_logs')
-          .select(`id, created_at, profiles(nom), candidats(nom)`)
+          .select(`id, created_at, profiles(full_name), candidats(nom)`) // 👈 Correction ici
           .eq('id', payload.new.id)
           .single();
 
@@ -86,7 +85,7 @@ export default function LiveFeed({ voteId }) {
             className={`animate-in slide-in-from-right fade-in duration-500 border-l-2 ${theme.accent} pl-3 py-1`}
           >
             <p className={`text-xs font-black ${theme.text} mb-1`}>
-              {log.profiles?.nom || 'Un participant'} 
+              {log.profiles?.full_name || 'Un participant'}  {/* 👈 Correction ici */}
               <span className="font-medium text-[10px] uppercase tracking-widest text-slate-500 mx-1">
                 a voté pour
               </span> 

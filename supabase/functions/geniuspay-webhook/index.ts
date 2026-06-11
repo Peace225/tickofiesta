@@ -42,11 +42,15 @@ serve(async (req) => {
       if (candidat_id) {
         console.log(`✅ Achat direct: Attribution de ${votesToAdd} votes au candidat ${candidat_id} (Invité: ${is_guest})`)
         
-        // Création du tableau de votes pour déclencher le trigger SQL qui fera +X au score
+        // Création du tableau de votes AVEC TRAÇABILITÉ COMPLÈTE
         const logsToInsert = Array.from({ length: votesToAdd }).map(() => ({
           user_id: user_id || null, 
           candidat_id: candidat_id,
-          is_public: true
+          is_public: true,
+          // 👇 AJOUT DE LA TRAÇABILITÉ ICI
+          voter_name: metadata.voter_name || null,
+          transaction_id: data.order_id || body.payment_id || body.id || null
+          // 👆 ==========================
         }))
 
         const { error: logsError } = await supabase
@@ -156,7 +160,6 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, type: "tickets", count: inserted.length }), { headers: corsHeaders })
 
-  // 🚨 CORRECTION ICI : Ajout de ": any" pour corriger l'erreur TypeScript
   } catch (e: any) {
     console.error(e)
     return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: corsHeaders })

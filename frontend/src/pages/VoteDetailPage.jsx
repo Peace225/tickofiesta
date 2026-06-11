@@ -10,7 +10,6 @@ import LiveFeed from '../components/vote/LiveFeed';
 import { Zap, X, Trophy, ArrowLeft, Share2, MapPin, Star, CheckCircle2, Lock } from 'lucide-react';
 
 const PACKS = [
-  
   { id: 'pack10', votes: 10, prix: 700 },
   { id: 'pack30', votes: 30, prix: 3000 },
   { id: 'pack50', votes: 50, prix: 5000 },
@@ -276,6 +275,12 @@ export default function VoteDetailPage() {
           phone_number: phoneNumber, 
           description: descriptionText, 
           userId: user?.id || null,
+          
+          // 👇 NOUVELLES LIGNES POUR REDIRECTION ET SÉCURITÉ WEBHOOK
+          return_url: window.location.href, 
+          webhook_url: "https://kmtnulchjoljeyplfoin.supabase.co/functions/v1/geniuspay-webhook",
+          // 👆 ====================================================
+
           metadata: {
             pack_id: selectedPack.id,
             votes_to_credit: selectedPack.votes,

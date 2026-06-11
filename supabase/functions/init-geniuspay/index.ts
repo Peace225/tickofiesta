@@ -38,17 +38,23 @@ serve(async (req) => {
       })
     }
 
+    // --- CRÉATION DU PAYLOAD CORRIGÉ ---
     const payload = {
       amount: amount,
       currency: 'XOF',
       phone: body.phone_number || body.telephone || '+2250700000000',
       email: body.email || 'client@tickofiesta.com',
-      name: body.name || 'Client TickoFiesta',
+      name: body.name || body.metadata?.voter_name || 'Client TickoFiesta',
       description: body.description || `Paiement TickoFiesta - ${body.reference || ''}`,
       reference: body.reference || body.stand_nom || undefined,
-      callback_url: "https://kmtnulchjoljeyplfoin.supabase.co/functions/v1/geniuspay-webhook",
-      return_url: 'https://tickofiesta.vercel.app/paiement/success',
-      cancel_url: 'https://tickofiesta.vercel.app/paiement?cancel=true'
+      
+      // 👇 CORRECTION : URLs DYNAMIQUES ET METADATA
+      return_url: body.return_url || 'https://tickofiesta.vercel.app/paiement/success',
+      cancel_url: body.return_url || 'https://tickofiesta.vercel.app/paiement?cancel=true',
+      webhook_url: body.webhook_url || "https://kmtnulchjoljeyplfoin.supabase.co/functions/v1/geniuspay-webhook",
+      callback_url: body.webhook_url || "https://kmtnulchjoljeyplfoin.supabase.co/functions/v1/geniuspay-webhook",
+      metadata: body.metadata || {} // <- C'est ça qui manquait pour distribuer les votes !
+      // 👆 =========================================
     }
 
     console.log("Envoi payload à GeniusPay:", JSON.stringify(payload))
@@ -90,7 +96,7 @@ serve(async (req) => {
       status: 200
     })
 
-  } catch (e) {
+  } catch (e: any) {
     console.error("Erreur critique:", e.message)
     return new Response(JSON.stringify({
       success: false,

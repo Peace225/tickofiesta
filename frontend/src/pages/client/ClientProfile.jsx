@@ -4,7 +4,8 @@ import { supabase } from '../../config/supabaseClient';
 import toast from 'react-hot-toast';
 import { 
   User, Mail, Phone, Award, Gift, 
-  Loader2, Save, Sparkles, ShieldCheck, CheckCircle2, Camera 
+  Loader2, Save, Sparkles, ShieldCheck, CheckCircle2, Camera,
+  Zap, Users, Copy, Check, MessageCircle
 } from 'lucide-react';
 
 export default function ClientProfile() {
@@ -16,6 +17,11 @@ export default function ClientProfile() {
   const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Nouveaux états pour le parrainage et les crédits
+  const [credits, setCredits] = useState(0);
+  const [referralCount, setReferralCount] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   const [form, setForm] = useState({
     nom: '',
@@ -23,75 +29,101 @@ export default function ClientProfile() {
     telephone: ''
   });
 
-  // Détecte si le profil est incomplet (nom générique ou email technique)
   const isIncomplete = profile?.nom?.startsWith('User_') || profile?.email?.includes('@participant.tickofiesta.ci');
+  const referralLink = `${window.location.origin}/register?role=client&ref=${user?.id}`;
 
   useEffect(() => {
     if (user?.id) fetchProfile();
   }, [user]);
 
+  // Écoute en temps réel des crédits
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const creditChannel = supabase.channel(`public:user_credits:user_id=eq.${user.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_credits', filter: `user_id=eq.${user.id}` }, (payload) => {
+        setCredits(payload.new.balance);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(creditChannel);
+    };
+  }, [user]);
+
   const fetchProfile = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      setLoading(true);
+      let data = null;
 
-      if (error) throw error;
-      
+      // 1. Profil par id
+      const byId = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      if (byId.data) data = byId.data;
+
+      // 2. Profil orphelin par téléphone
+      if (!data && user?.phone) {
+        const byPhone = await supabase.from('profiles').select('*').eq('telephone', user.phone).maybeSingle();
+        if (byPhone.data) {
+          data = byPhone.data;
+          if (data.id !== user.id) {
+            await supabase.from('profiles').update({ id: user.id }).eq('telephone', user.phone);
+            data.id = user.id;
+          }
+        }
+      }
+
+      // 3. Création minimale
+      if (!data) {
+        const { data: created, error } = await supabase.from('profiles').insert({ id: user.id, points: 0 }).select().single();
+        if (error) throw error;
+        data = created;
+      }
+
       setProfile(data);
       setForm({
         nom: data.nom?.startsWith('User_') ? '' : (data.nom || ''),
-        email: data.email?.includes('@participant.tickofiesta.ci') ? '' : (data.email || ''),
-        telephone: data.telephone || ''
+        email: data.email?.includes('@participant') ? '' : (data.email || ''),
+        telephone: data.telephone || user.phone || ''
       });
-    } catch (error) {
-      console.error('Erreur fetch profile:', error);
+      if (!data.nom || data.nom.startsWith('User_')) setIsEditing(true);
+
+      // --- NOUVEAU : Récupération des crédits de vote et statistiques de parrainage ---
+      const [creditsResponse, referralsResponse] = await Promise.all([
+        supabase.from('user_credits').select('balance').eq('user_id', user.id).maybeSingle(),
+        supabase.from('referrals').select('id', { count: 'exact', head: true }).eq('referrer_id', user.id)
+      ]);
+
+      if (creditsResponse.data) setCredits(creditsResponse.data.balance);
+      if (referralsResponse.count !== null) setReferralCount(referralsResponse.count);
+
+    } catch (e) {
+      console.error('Erreur fetch profile:', e);
       toast.error('Impossible de charger le profil');
     } finally {
       setLoading(false);
     }
   };
 
-  // --- NOUVELLE FONCTION : UPLOAD DE L'AVATAR ---
   const uploadAvatar = async (event) => {
     try {
       setUploading(true);
-      
-      if (!event.target.files || event.target.files.length === 0) {
-        throw new Error('Vous devez sélectionner une image.');
-      }
+      if (!event.target.files || event.target.files.length === 0) throw new Error('Sélectionnez une image.');
 
       const file = event.target.files[0];
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // 1. Upload du fichier dans le bucket 'avatars'
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file);
-
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // 2. Récupération de l'URL publique
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
 
-      // 3. Mise à jour de la table profiles
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', user.id);
-
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
       if (updateError) throw updateError;
 
-      // 4. Mise à jour de l'affichage local
       setProfile({ ...profile, avatar_url: publicUrl });
       toast.success('Photo de profil mise à jour !');
-      
     } catch (error) {
       toast.error(error.message || "Erreur lors de l'upload de l'image");
     } finally {
@@ -106,45 +138,58 @@ export default function ClientProfile() {
 
     setSaving(true);
     try {
-      // 1. Déterminer s'il faut accorder des points
+      const { data: doublon } = await supabase.from('profiles').select('id').eq('telephone', form.telephone.trim()).neq('id', user.id).maybeSingle();
+      if (doublon) throw new Error("Ce numéro est déjà utilisé par un autre compte.");
+
       const shouldAwardPoints = isIncomplete && form.nom && form.email;
       const pointsToAward = shouldAwardPoints ? 100 : 0;
-      const newPointsBalance = (profile.points || 0) + pointsToAward;
+      const newPoints = (profile.points || 0) + pointsToAward;
 
-      // 2. Mise à jour de la table profiles
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          nom: form.nom.trim(),
-          email: form.email.trim(),
-          telephone: form.telephone.trim(),
-          points: newPointsBalance
-        })
-        .eq('id', user.id);
+      const { error: updateError } = await supabase.from('profiles').update({
+        nom: form.nom.trim(),
+        email: form.email.trim(),
+        points: newPoints
+      }).eq('id', user.id);
 
       if (updateError) throw updateError;
 
-      // 3. Succès et animation
-      setProfile({ ...profile, nom: form.nom, email: form.email, points: newPointsBalance });
+      setProfile({ ...profile, ...form, points: newPoints });
       setIsEditing(false);
 
       if (shouldAwardPoints) {
         toast.success(
           <div className="flex flex-col gap-1">
             <span className="font-bold text-lg">Profil complété ! 🎉</span>
-            <span className="text-sm">+100 points ajoutés à votre cagnotte.</span>
+            <span className="text-sm">+100 points ajoutés.</span>
           </div>,
           { duration: 5000, icon: '🎁' }
         );
       } else {
-        toast.success('Profil mis à jour avec succès');
+        toast.success('Profil mis à jour !');
       }
 
     } catch (error) {
-      toast.error(error.message || 'Erreur lors de la mise à jour');
+      if (error.code === '23505') {
+        toast.error("Ce numéro vient d'être pris. Choisis-en un autre.");
+      } else {
+        toast.error(error.message || 'Erreur lors de la mise à jour');
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  // Actions de parrainage
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    toast.success("Lien copié dans le presse-papiers !");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareOnWhatsApp = () => {
+    const message = encodeURIComponent(`Soutiens tes candidats préférés sur TickoFiesta ! Inscris-toi rapidement via ce lien et nous gagnerons tous les deux des votes gratuits 🎁 : ${referralLink}`);
+    window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
   const theme = {
@@ -164,40 +209,50 @@ export default function ClientProfile() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12">
       
       {/* HEADER DU PROFIL */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className={`text-3xl font-black tracking-tight ${theme.text}`}>Mon Espace</h1>
-          <p className={`text-sm font-medium mt-1 ${theme.sub}`}>Gérez vos informations et votre fidélité</p>
+          <p className={`text-sm font-medium mt-1 ${theme.sub}`}>Gérez vos informations, vos votes et vos gains</p>
         </div>
         
-        {/* BADGE POINTS */}
-        <div className="flex items-center gap-3 bg-gradient-to-r from-[#6c47ff] to-[#a385ff] p-1 pr-4 rounded-full shadow-lg shadow-[#6c47ff]/20">
-          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
-            <Award size={20} className="text-white" />
+        {/* BADGES */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-cyan-500 p-1 pr-4 rounded-full shadow-lg shadow-blue-500/20">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
+              <Zap size={20} className="text-white fill-white" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">Crédits de vote</span>
+              <span className="text-white font-black leading-none">{credits} dispo.</span>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">TickoPoints</span>
-            <span className="text-white font-black leading-none">{profile?.points || 0} pts</span>
+
+          <div className="flex items-center gap-3 bg-gradient-to-r from-[#6c47ff] to-[#a385ff] p-1 pr-4 rounded-full shadow-lg shadow-[#6c47ff]/20">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
+              <Award size={20} className="text-white" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">TickoPoints</span>
+              <span className="text-white font-black leading-none">{profile?.points || 0} pts</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* BANNIÈRE DE GAMIFICATION (S'affiche uniquement si incomplet) */}
+      {/* BANNIÈRE DE GAMIFICATION (Si incomplet) */}
       {isIncomplete && !isEditing && (
         <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-amber-400 to-orange-500 p-8 text-white shadow-xl shadow-orange-500/20 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="absolute -right-10 -top-10 opacity-20">
-            <Gift size={200} />
-          </div>
+          <div className="absolute -right-10 -top-10 opacity-20"><Gift size={200} /></div>
           <div className="relative z-10 flex-1">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-black uppercase tracking-widest mb-4">
               <Sparkles size={14} /> Récompense débloquée
             </div>
             <h2 className="text-2xl md:text-3xl font-black mb-2 leading-tight">Complétez votre profil<br/>et gagnez 100 points !</h2>
             <p className="text-white/90 font-medium">
-              Nous avons créé votre compte rapidement. Ajoutez votre nom et votre adresse e-mail pour finaliser votre inscription et profiter de vos avantages fidélité.
+              Ajoutez votre nom et votre adresse e-mail pour finaliser votre inscription et débloquer vos avantages.
             </p>
           </div>
           <div className="relative z-10 w-full md:w-auto">
@@ -210,6 +265,55 @@ export default function ClientProfile() {
           </div>
         </div>
       )}
+
+      {/* NOUVEAU : PROGRAMME AMBASSADEUR (BOUCLE VIRALE) */}
+      <div className={`rounded-[2rem] border p-8 md:p-10 transition-colors bg-gradient-to-br from-[#0b1021] to-[#1a1f35] text-white shadow-2xl`}>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-2 text-cyan-400 bg-cyan-400/10 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-3 border border-cyan-400/20">
+              <Sparkles size={14} /> Programme Ambassadeur
+            </div>
+            <h2 className="text-2xl font-black mb-2">Invitez & Gagnez des votes</h2>
+            <p className="text-slate-400 text-sm max-w-xl">
+              Partagez ce lien avec vos amis. À chaque fois qu'un ami s'inscrit via votre lien, 
+              <strong className="text-white"> vous recevez automatiquement 5 votes gratuits</strong> pour soutenir votre candidat favori.
+            </p>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 shrink-0">
+            <div className="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+              <Users size={24} />
+            </div>
+            <div>
+              <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Filleuls inscrits</p>
+              <p className="text-2xl font-black text-white">{referralCount}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex-1 relative">
+            <input 
+              type="text" 
+              readOnly 
+              value={referralLink} 
+              className="w-full h-14 pl-4 pr-12 bg-white/5 border border-white/10 rounded-xl text-slate-300 text-sm font-medium outline-none focus:border-cyan-500 transition-colors"
+            />
+          </div>
+          <button 
+            onClick={copyToClipboard}
+            className={`h-14 px-6 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-300 ${copied ? 'bg-green-500 text-white' : 'bg-white/10 hover:bg-white/20 text-white border border-white/5'}`}
+          >
+            {copied ? <Check size={18} /> : <Copy size={18} />}
+            {copied ? 'Copié !' : 'Copier'}
+          </button>
+          <button 
+            onClick={shareOnWhatsApp}
+            className="h-14 px-6 bg-[#25D366] hover:bg-[#22bf5b] text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-[#25D366]/20"
+          >
+            <MessageCircle size={18} /> Partager WhatsApp
+          </button>
+        </div>
+      </div>
 
       {/* FORMULAIRE / AFFICHAGE PROFIL */}
       <div className={`rounded-[2rem] border p-8 md:p-10 transition-colors ${theme.card}`}>
@@ -224,21 +328,9 @@ export default function ClientProfile() {
                 ) : (
                   <User size={32} className="text-[#6c47ff]" />
                 )}
-                
-                {/* Overlay au survol pour modifier l'image */}
                 <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                  {uploading ? (
-                    <Loader2 size={20} className="text-white animate-spin" />
-                  ) : (
-                    <Camera size={20} className="text-white" />
-                  )}
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={uploadAvatar} 
-                    disabled={uploading} 
-                  />
+                  {uploading ? <Loader2 size={20} className="text-white animate-spin" /> : <Camera size={20} className="text-white" />}
+                  <input type="file" accept="image/*" className="hidden" onChange={uploadAvatar} disabled={uploading} />
                 </label>
               </div>
             </div>
@@ -320,9 +412,7 @@ export default function ClientProfile() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
             <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-xl bg-black/5 dark:bg-white/5 ${theme.sub}`}>
-                <User size={20} />
-              </div>
+              <div className={`p-3 rounded-xl bg-black/5 dark:bg-white/5 ${theme.sub}`}><User size={20} /></div>
               <div>
                 <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.sub}`}>Nom complet</p>
                 <p className={`font-semibold text-lg ${theme.text}`}>{profile?.nom || '—'}</p>
@@ -330,9 +420,7 @@ export default function ClientProfile() {
             </div>
             
             <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-xl bg-black/5 dark:bg-white/5 ${theme.sub}`}>
-                <Mail size={20} />
-              </div>
+              <div className={`p-3 rounded-xl bg-black/5 dark:bg-white/5 ${theme.sub}`}><Mail size={20} /></div>
               <div>
                 <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.sub}`}>Adresse E-mail</p>
                 <p className={`font-semibold text-lg ${theme.text}`}>{profile?.email || '—'}</p>
@@ -340,9 +428,7 @@ export default function ClientProfile() {
             </div>
 
             <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-xl bg-black/5 dark:bg-white/5 ${theme.sub}`}>
-                <Phone size={20} />
-              </div>
+              <div className={`p-3 rounded-xl bg-black/5 dark:bg-white/5 ${theme.sub}`}><Phone size={20} /></div>
               <div>
                 <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.sub}`}>Téléphone</p>
                 <p className={`font-semibold text-lg ${theme.text}`}>{profile?.telephone || '—'}</p>
@@ -350,9 +436,7 @@ export default function ClientProfile() {
             </div>
 
             <div className="flex items-start gap-4">
-              <div className={`p-3 rounded-xl bg-green-500/10 text-green-500`}>
-                <ShieldCheck size={20} />
-              </div>
+              <div className={`p-3 rounded-xl bg-green-500/10 text-green-500`}><ShieldCheck size={20} /></div>
               <div>
                 <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${theme.sub}`}>Statut du compte</p>
                 <p className="font-bold text-green-500 flex items-center gap-1">

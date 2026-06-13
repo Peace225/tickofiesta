@@ -109,18 +109,33 @@ const PublicLayout = () => {
   );
 };
 
-// Redirection intelligente selon le rôle
+// Redirection intelligente selon le rôle - CORRIGÉE POUR L'OTP
 const AuthRedirectHandler = ({ children }) => {
   const { user } = useSelector(state => state.auth || {});
+  const location = useLocation(); // On a besoin de savoir où se trouve l'utilisateur
+  
   if (user) {
-    const rawRole = user?.role || user?.user_metadata?.role || 'client';
+    // 🚨 LE PANNEAU STOP : On empêche la redirection si l'organisateur est en train de valider son code OTP sur la page register
+    if (location.pathname === '/register' && sessionStorage.getItem('otp_pending') === 'true') {
+      return children;
+    }
+
+    // CORRECTION CRITIQUE: Vérifier d'abord les metadata, sinon Supabase retourne toujours "authenticated" pour user.role
+    const rawRole = user?.user_metadata?.role || 'client';
     const userRole = String(rawRole).toLowerCase();
     
-    if (['admin','super_admin','superadmin'].includes(userRole)) return <Navigate to="/admin" replace />;
-    if (userRole === 'organisateur') return <Navigate to="/dashboard" replace />;
+    if (['admin','super_admin','superadmin'].includes(userRole)) {
+      return <Navigate to="/admin" replace />;
+    }
     
+    if (userRole === 'organisateur') {
+      return <Navigate to="/dashboard" replace />;
+    }
+    
+    // Fallback pour les clients/participants
     return <Navigate to="/client/profile" replace />; 
   }
+  
   return children;
 };
 

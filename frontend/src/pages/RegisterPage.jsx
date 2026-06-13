@@ -18,9 +18,11 @@ export default function RegisterPage() {
   const [showContractModal, setShowContractModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   
-  // Gestion des étapes : 'register' -> 'verify'
+  // Gestion des étapes et du custom OTP
   const [step, setStep] = useState('register');
   const [otpCode, setOtpCode] = useState('');
+  const [expectedOtp, setExpectedOtp] = useState(''); 
+  const [tempAuth, setTempAuth] = useState(null); 
 
   const [form, setForm] = useState({
     nom: '',
@@ -41,7 +43,6 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!form.accepteConditions) return toast.error('Acceptez les conditions.');
     
-    // Vérifications
     if (form.role === 'organisateur') {
       if (!form.nom.trim()) return toast.error('Nom complet requis');
       if (!form.email.includes('@')) return toast.error('Email invalide');
@@ -50,11 +51,19 @@ export default function RegisterPage() {
     if (form.mot_de_passe.length < 6) return toast.error('6 caractères minimum pour le mot de passe');
 
     setLoading(true);
+
+    // 🚨 LE SECRET EST ICI : On place le blocage AVANT même de contacter Supabase !
+    if (form.role === 'organisateur') {
+      sessionStorage.setItem('otp_pending', 'true');
+    }
+
     try {
       const authEmail = form.role === 'client' 
         ? `${form.telephone.replace(/\s+/g, '')}@participant.tickofiesta.ci` 
         : form.email.trim();
 
+      // ⚠️ À l'instant où ça s'exécute, Supabase va déclencher la connexion, 
+      // mais App.jsx va voir "otp_pending" et bloquer la redirection vers le dashboard !
       const { data, error } = await supabase.auth.signUp({
         email: authEmail,
         password: form.mot_de_passe,
@@ -80,59 +89,68 @@ export default function RegisterPage() {
         localStorage.removeItem('tickofiesta_ref');
       }
 
-      // Si une session est directement retournée (confirmation email désactivée)
-      if (data.session) {
-        await finalizeRegistration(data.user, data.session);
-      } else {
-        // Si aucune session -> Confirmation email requise par Supabase
-        if (form.role === 'organisateur') {
-          // On passe à l'écran de vérification OTP
-          setStep('verify');
-          toast.success('Code envoyé par email !');
+      // SÉPARATION DES FLUX SELON LE RÔLE
+      if (form.role === 'client') {
+        // Pour le participant, on n'a pas besoin du blocage
+        sessionStorage.removeItem('otp_pending');
+        if (data.session) {
+          await finalizeRegistration(data.user, data.session);
         } else {
-          // Pour le client (fausse adresse email), on affiche la modale classique
           setShowSuccessModal(true);
+        }
+      } else {
+        // Flux Organisateur
+        if (data.session) {
+          // On le déconnecte silencieusement car on l'a bloqué sur la page
+          await supabase.auth.signOut();
+          
+          const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+          setExpectedOtp(generatedCode);
+          setTempAuth({ user: data.user, session: data.session });
+          
+          setStep('verify'); // Affiche l'écran du code OTP
+          toast.success('Code de sécurité généré !');
+
+          try {
+            const { error: fnError } = await supabase.functions.invoke('send-otp', {
+              body: { 
+                email: form.email.trim(), 
+                nom: form.nom.trim(),
+                code: generatedCode 
+              }
+            });
+
+            if (fnError) throw fnError;
+          } catch (emailError) {
+            console.error("Erreur envoi email OTP :", emailError);
+            toast.error("Impossible d'envoyer l'e-mail de vérification.");
+          }
         }
       }
     } catch (err) {
+      // En cas d'erreur d'inscription, on enlève le blocage
+      sessionStorage.removeItem('otp_pending');
       toast.error(err.message || 'Erreur lors de l\'inscription');
     } finally {
       setLoading(false);
     }
   };
 
- // ÉTAPE 2 : VÉRIFICATION DU CODE OTP
+  // ÉTAPE 2 : VÉRIFICATION DU CODE OTP MANUEL
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     if (otpCode.length < 6) return toast.error('Veuillez entrer le code à 6 chiffres');
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: form.email.trim(),
-        token: otpCode,
-        type: 'signup'
-      });
-
-      if (error) throw new Error('Code incorrect ou expiré.');
-
-      if (data.session) {
+      if (otpCode === expectedOtp && tempAuth) {
         
-        // 🚀 APPEL À RESEND POUR L'EMAIL DE SUCCÈS
-        try {
-          await fetch('/api/send-welcome', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: form.email.trim(),
-              nom: form.nom.trim()
-            }),
-          });
-        } catch (emailError) {
-          console.error("Erreur envoi email bienvenue :", emailError);
-        }
-
-        await finalizeRegistration(data.user, data.session);
+        // 🚨 3. Le code est bon, on retire le panneau STOP pour autoriser l'entrée au Dashboard !
+        sessionStorage.removeItem('otp_pending');
+        
+        await finalizeRegistration(tempAuth.user, tempAuth.session);
+      } else {
+        throw new Error('Code incorrect. Veuillez réessayer.');
       }
     } catch (err) {
       toast.error(err.message);
@@ -300,6 +318,7 @@ export default function RegisterPage() {
                         <Mail size={20} className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-[#0071e3] ${apple.sub}`} />
                         <input
                           type="email" required value={form.email} placeholder="Adresse e-mail professionnelle"
+                          autoComplete="email"
                           onChange={(e) => setForm({ ...form, email: e.target.value })}
                           className={`w-full h-14 pl-12 pr-4 rounded-[1rem] text-[15px] font-medium outline-none ring-2 ring-transparent transition-all shadow-sm ${apple.input}`}
                         />
@@ -311,6 +330,7 @@ export default function RegisterPage() {
                     <Smartphone size={20} className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors group-focus-within:text-[#0071e3] ${apple.sub}`} />
                     <input
                       type="tel" required value={form.telephone} placeholder="Numéro de téléphone (ex: 0707070707)"
+                      autoComplete="tel"
                       onChange={(e) => setForm({ ...form, telephone: e.target.value.replace(/\D/g, '') })}
                       className={`w-full h-14 pl-12 pr-4 rounded-[1rem] text-[15px] font-medium outline-none ring-2 ring-transparent transition-all shadow-sm ${apple.input}`}
                     />
@@ -416,7 +436,7 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* Success Modal (Principalement pour les clients ou si fallback nécessaire) */}
+      {/* Success Modal */}
       {showSuccessModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
           <div className={`w-full max-w-sm rounded-[2rem] p-8 ${apple.card} text-center border shadow-2xl animate-in zoom-in-95`}>

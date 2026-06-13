@@ -65,14 +65,14 @@ const VoteModal = ({
         <div className="p-5 overflow-y-auto custom-scrollbar">
           
           {/* INDICATEUR DE SOLDE EN TEMPS RÉEL DANS LA MODALE */}
-          if (user) && (
+          {user && (
             <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl flex justify-between items-center mb-5 animate-in fade-in duration-300">
               <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider">Votre solde actuel</span>
               <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 border border-blue-100/50 shadow-sm">
                 <Zap size={12} className="fill-blue-600 animate-pulse" /> {solde} crédit{solde > 1 ? 's' : ''}
               </span>
             </div>
-          )
+          )}
 
           {/* Grille des Packs */}
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Pack de votes</h4>

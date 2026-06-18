@@ -174,7 +174,7 @@ export default function VoteDetailPage() {
       confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: colors });
       confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: colors });
       if (Date.now() < end) requestAnimationFrame(frame);
-    } ( ) ) ;
+    } () );
   }, []);
 
   const loadInitialData = useCallback(async () => {
@@ -183,10 +183,7 @@ export default function VoteDetailPage() {
       if (vError) throw vError;
       setVoteData(vData);
       
-      // La base de données gère les scores avec le Trigger, on récupère juste les candidats
       const { data: cData } = await supabase.from('candidats').select('*').eq('vote_id', vData.id);
-      
-      // On trie du premier au dernier
       setCandidats((cData || []).sort((a, b) => (b.score || 0) - (a.score || 0)));
       
       if(user) {
@@ -198,7 +195,6 @@ export default function VoteDetailPage() {
 
   useEffect(() => { loadInitialData(); }, [loadInitialData]);
 
-  // Écoute des mises à jour en temps réel
   useEffect(() => {
     if (!user && !voteData) return;
     let creditChannel;
@@ -212,7 +208,7 @@ export default function VoteDetailPage() {
           setSolde(newBalance);
 
           if (newBalance > oldBalance) {
-            const addedCredits = newBalance - oldBalance;
+            const addedCredits = newBalance - payload.old.balance;
             toast.success(`Portefeuille rechargé de ${addedCredits} crédit(s) ! 🔋`, { position: 'top-right' });
             triggerSuccessAnimation();
           }
@@ -221,12 +217,10 @@ export default function VoteDetailPage() {
     }
 
     if (voteData) {
-      // On écoute les modifications sur les candidats (générées par le Trigger SQL)
       candidatsChannel = supabase.channel(`public:candidats:vote_id=eq.${voteData.id}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'candidats', filter: `vote_id=eq.${voteData.id}` }, (payload) => {
           setCandidats(prev => {
             const updatedCandidats = prev.map(c => c.id === payload.new.id ? { ...c, score: payload.new.score } : c);
-            // Re-trier pour que l'ordre change en temps réel
             return updatedCandidats.sort((a, b) => (b.score || 0) - (a.score || 0));
           });
         })
@@ -239,7 +233,6 @@ export default function VoteDetailPage() {
     };
   }, [user, voteData, triggerSuccessAnimation]); 
 
-  // Action: Voter avec un crédit existant
   const handleInstantVoteWithCredit = async (candidat) => {
     if (isOwnEvent) {
       toast.error("Action non autorisée.", { icon: '⚠️' });
@@ -249,7 +242,6 @@ export default function VoteDetailPage() {
     const creditsRestants = solde - 1;
     setSolde(creditsRestants);
     
-    // Mise à jour visuelle immédiate (optimiste)
     setCandidats(prev => {
       const updated = prev.map(c => c.id === candidat.id ? { ...c, score: (c.score || 0) + 1 } : c);
       return updated.sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -258,7 +250,6 @@ export default function VoteDetailPage() {
     triggerSuccessAnimation();
     toast.success("Vote pris en compte ! ✨", { position: 'top-center' });
 
-    // L'insertion va déclencher le Trigger SQL qui mettra à jour la BDD pour de vrai
     const { error } = await supabase.from('vote_logs').insert([{ 
       user_id: user.id, 
       candidat_id: candidat.id,
@@ -266,12 +257,11 @@ export default function VoteDetailPage() {
     }]);
     
     if (error) {
-      setSolde(solde); // Rollback du solde
+      setSolde(solde); 
       toast.error("Une erreur est survenue.");
     }
   };
 
-  // Action: Acheter de nouveaux crédits / votes
   const handlePayment = async () => {
     setIsProcessing(true);
     const voterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || fullName;
@@ -390,67 +380,97 @@ export default function VoteDetailPage() {
       <main className="max-w-7xl mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
+            
+            {/* CLASSEMENT PREMIUM ET BOUCLE EN TEMPS RÉEL */}
             {candidats.map((c, index) => {
-              const isChampion = index === 0 && (c.score || 0) > 0;
+              const rank = index + 1;
+              
+              // Définition des styles dynamiques premium basés sur le classement
+              let cardStyles = "border-slate-100 hover:shadow-md";
+              let badgeStyles = "bg-slate-600/90 text-white";
+              let badgeText = `N°${rank}`;
+              let isTop3 = rank <= 3;
+
+              if (rank === 1) {
+                cardStyles = "border-amber-400 shadow-[0_4px_20px_rgba(245,166,35,0.15)] ring-1 ring-amber-400/30 scale-[1.01]";
+                badgeStyles = "bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black shadow-sm";
+                badgeText = "★ N°1";
+              } else if (rank === 2) {
+                cardStyles = "border-slate-300 shadow-[0_4px_15px_rgba(148,163,184,0.1)]";
+                badgeStyles = "bg-gradient-to-r from-slate-400 to-slate-200 text-slate-900 font-bold";
+              } else if (rank === 3) {
+                cardStyles = "border-orange-300 shadow-[0_4px_15px_rgba(251,146,60,0.1)]";
+                badgeStyles = "bg-gradient-to-r from-orange-500 to-orange-300 text-white font-bold";
+              }
 
               return (
-                <div 
-                  key={c.id} 
-                  className={`bg-white p-3 rounded-2xl relative group flex flex-col justify-between transition-all duration-500 ${
-                    isChampion 
-                      ? 'border-2 border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.25)] scale-[1.03] z-10' 
-                      : 'border border-slate-100 shadow-sm hover:border-blue-200'
-                  }`}
-                >
-                  <div>
-                    {isChampion && (
-                      <div className="absolute -top-3 -right-3 bg-gradient-to-br from-yellow-400 to-yellow-600 p-2.5 rounded-full z-20 shadow-lg animate-bounce ring-4 ring-white">
-                        <Trophy size={16} className="text-white" fill="currentColor" />
-                      </div>
-                    )}
-                    
-                    <img src={c.photo_url} className={`w-full aspect-square object-cover rounded-xl mb-3 transition-all ${isChampion ? 'border-2 border-yellow-100' : 'border border-slate-100'}`} />
-                    <button onClick={() => handleShareCandidate(c)} className="absolute top-5 left-5 bg-white/90 p-1.5 rounded-lg shadow-sm hover:bg-white"><Share2 size={14} className="text-slate-600" /></button>
-                    <h3 className="font-black text-sm text-slate-800 line-clamp-1 mb-2">{c.nom}</h3>
-                  </div>
+                <div key={c.id} className={`bg-white p-3 rounded-2xl shadow-sm border flex flex-col transition-all duration-300 relative ${cardStyles}`}>
                   
-                  <div>
-                    <div className="flex items-center justify-between mb-3 mt-1">
-                      <button onClick={() => { setSelectedCandidatForSupporters(c); setSupportersModalOpen(true); }} className="text-[10px] font-bold text-yellow-600 bg-yellow-50 hover:bg-yellow-100 px-2 py-1 rounded-md">Voir Sponsors</button>
-                      <div className={`flex items-center gap-1 text-[11px] font-black px-2 py-1 rounded-md border shadow-sm ${isChampion ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
-                        <Star size={12} className={isChampion ? "fill-yellow-500 text-yellow-500" : "fill-blue-500 text-blue-500"} /> {c.score || 0}
-                      </div>
-                    </div>
+                  {/* Conteneur Photo et Badge de champion */}
+                  <div className="relative aspect-square rounded-xl overflow-hidden mb-3 bg-slate-100">
+                    <img src={c.photo_url || '/placeholder.jpg'} alt={c.nom} className="w-full h-full object-cover" />
                     
-                    {/* BOUTON VOTER AVEC RESTRICTION */}
-                    <button 
-                      onClick={() => {
-                        if (isOwnEvent) {
-                          toast.error("En tant qu'organisateur, vous ne pouvez pas voter pour votre propre événement.", { icon: '⚠️' });
-                          return;
-                        }
-                        if (user && solde > 0) {
-                          handleInstantVoteWithCredit(c);
-                        } else {
-                          setSelectedCandidatForVote(c);
-                          setSelectedPack(PACKS[2]); 
-                          setPaymentModalOpen(true);
-                        }
-                      }} 
-                      className={`w-full py-2.5 font-black text-[11px] rounded-xl transition-colors shadow-md ${
-                        isOwnEvent 
-                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' 
-                          : isChampion 
-                            ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white' 
-                            : 'bg-blue-600 hover:bg-blue-700 text-white'
-                      }`}
-                    >
-                      {isOwnEvent ? 'NON AUTORISÉ' : 'VOTER'}
-                    </button>
+                    {/* Badge de classement premium */}
+                    <div className={`absolute top-2 left-2 z-10 px-2.5 py-1 rounded-lg text-[10px] uppercase tracking-wide backdrop-blur-xs flex items-center justify-center gap-1 ${badgeStyles}`}>
+                      {rank === 1 && <Trophy size={10} className="fill-black" />}
+                      {badgeText}
+                    </div>
                   </div>
+
+                  <h3 className="font-bold text-slate-800 text-sm truncate mb-1 flex items-center gap-1">
+                    {c.nom} 
+                    {rank === 1 && <Star size={12} className="text-amber-500 fill-amber-500 shrink-0" />}
+                  </h3>
+
+                  {/* DESIGN SCORE PREMIUM CORRIGÉ (OBJECTIF FIXE DE 1000 VOTES) */}
+                  <div className="mt-auto mb-4">
+                    <div className="flex justify-between items-end mb-1">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Étape</span>
+                      <span className={`text-[12px] font-black ${rank === 1 ? 'text-amber-600' : 'text-blue-600'}`}>
+                        {c.score ? c.score.toLocaleString('fr-FR') : '0'} <span className="text-[10px] text-slate-400 font-normal">/ 1 000 pts</span>
+                      </span>
+                    </div>
+
+                    {/* Barre de progression avec objectif de 1000 votes */}
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${rank === 1 ? 'bg-gradient-to-r from-amber-500 to-yellow-400' : 'bg-blue-500'}`}
+                        style={{ width: `${Math.min(((c.score || 0) / 1000) * 100, 100)}%` }} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bouton de vote dynamique */}
+                  <button 
+                    onClick={() => {
+                      if (isOwnEvent) {
+                        toast.error("En tant qu'organisateur, vous ne pouvez pas voter pour votre propre événement.", { icon: '⚠️' });
+                        return;
+                      }
+                      if (user && solde > 0) {
+                        handleInstantVoteWithCredit(c);
+                      } else {
+                        setSelectedCandidatForVote(c);
+                        setSelectedPack(PACKS[0]); 
+                        setPaymentModalOpen(true);
+                      }
+                    }} 
+                    className={`w-full py-2.5 font-black text-[11px] rounded-xl transition-all shadow-sm ${
+                      isOwnEvent 
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed' 
+                        : isOwnEvent 
+                          ? 'bg-slate-300 text-slate-500' 
+                          : rank === 1 
+                            ? 'bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-500 hover:to-yellow-500 text-slate-950 shadow-md shadow-amber-400/10' 
+                            : 'bg-[#ffc107] hover:bg-[#ffb300] text-black' 
+                    }`}
+                  >
+                    {isOwnEvent ? 'NON AUTORISÉ' : '⚡ Voter'}
+                  </button>
                 </div>
               );
             })}
+
           </div>
 
           <aside className="space-y-6">

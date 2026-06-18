@@ -11,13 +11,16 @@ export default function OrgDashboard() {
   const { user } = useSelector((s) => s.auth);
 
   const [events, setEvents] = useState([]);
-  const [revenus, setRevenus] = useState([]);
   const [cagnottes, setCagnottes] = useState([]);
   const [stands, setStands] = useState([]);
   const [transactions, setTransactions] = useState([]); 
   
+  // NOUVEAU : On stocke les scores en temps réel { id_candidat: score }
+  const [candidatsScores, setCandidatsScores] = useState({});
+  
   const [followersCount, setFollowersCount] = useState(0);
-  const [votesCount, setVotesCount] = useState(0);
+  const [billetsVendus, setBilletsVendus] = useState(0);
+  const [caTotal, setCaTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   
   const [timeFilter, setTimeFilter] = useState('jour'); 
@@ -25,7 +28,6 @@ export default function OrgDashboard() {
   // --- LOGIQUE DE PERSONNALISATION ---
   const nomOrganisateur = user?.user_metadata?.nom || 'Organisateur';
 
-  // Fonction pour extraire les initiales (ex: "Ticko Fiesta" -> "TF")
   const getInitials = (name) => {
     if (!name) return 'O';
     const words = name.split(' ');
@@ -50,29 +52,56 @@ export default function OrgDashboard() {
     if (showLoading) setLoading(true);
     
     try {
-      const { data: evData } = await supabase
-        .from('events')
-        .select('id, titre, statut')
-        .eq('organisateur_id', user.id);
-      
-      const eventIds = evData?.map(e => e.id) || [];
-
-      const [rev, cag, std, followers, votes, tx] = await Promise.all([
-        supabase.from('stats_organisateurs').select('*').eq('organisateur_id', user.id),
-        supabase.from('cagnottes').select('*').eq('organisateur_id', user.id).order('created_at', { ascending: false }).limit(3),
-        supabase.from('stands').select('id, statut').eq('organisateur_id', user.id),
-        supabase.from('abonnements').select('*', { count: 'exact', head: true }).eq('organisateur_id', user.id),
-        eventIds.length > 0 ? supabase.from('votes').select('*', { count: 'exact', head: true }).in('event_id', eventIds) : Promise.resolve({ count: 0 }),
-        eventIds.length > 0 ? supabase.from('transactions').select('montant, created_at').in('event_id', eventIds) : Promise.resolve({ data: [] })
+      // 1. Récupérer les événements et les concours de l'organisateur
+      const [evRes, votesRes] = await Promise.all([
+        supabase.from('events').select('id').eq('organisateur_id', user.id),
+        supabase.from('votes').select('id').eq('organisateur_id', user.id)
       ]);
       
-      setEvents(evData || []);
-      setRevenus(rev.data || []);
+      const eventIds = evRes.data?.map(e => e.id) || [];
+      const voteIds = votesRes.data?.map(v => v.id) || [];
+      
+      setEvents(evRes.data || []);
+
+      // 2. Récupérer la configuration des billets
+      let ticketConfigs = [];
+      if (eventIds.length > 0) {
+        const { data } = await supabase.from('tickets').select('id, prix').in('event_id', eventIds);
+        ticketConfigs = data || [];
+      }
+      const ticketIds = ticketConfigs.map(t => t.id);
+
+      // 3. Charger toutes les données réelles en parallèle
+      const [cag, std, followers, soldTicketsData, cData] = await Promise.all([
+        supabase.from('cagnottes').select('montant_actuel').eq('organisateur_id', user.id),
+        supabase.from('stands').select('id, statut').eq('organisateur_id', user.id),
+        supabase.from('abonnements').select('id', { count: 'exact', head: true }).eq('organisateur_id', user.id),
+        ticketIds.length > 0 ? supabase.from('user_tickets').select('id, created_at, ticket_type_id').in('ticket_type_id', ticketIds) : Promise.resolve({ data: [] }),
+        voteIds.length > 0 ? supabase.from('candidats').select('id, score').in('vote_id', voteIds) : Promise.resolve({ data: [] })
+      ]);
+
+      // Calcul des scores pour l'instantanéité
+      const scoresMap = {};
+      (cData.data || []).forEach(c => { scoresMap[c.id] = c.score || 0; });
+      setCandidatsScores(scoresMap);
+
+      // Calcul du Chiffre d'Affaires
+      const soldTickets = soldTicketsData.data || [];
+      let totalRevenue = 0;
+      
+      const txFormat = soldTickets.map(st => {
+        const tConf = ticketConfigs.find(t => t.id === st.ticket_type_id);
+        const price = Number(tConf?.prix || 0);
+        totalRevenue += price;
+        return { montant: price, created_at: st.created_at };
+      });
+      
       setCagnottes(cag.data || []);
       setStands(std.data || []);
       setFollowersCount(followers.count || 0);
-      setVotesCount(votes.count || 0);
-      setTransactions(tx.data || []); 
+      setBilletsVendus(soldTickets.length);
+      setCaTotal(totalRevenue);
+      setTransactions(txFormat);
 
     } catch (err) {
       console.error(err);
@@ -86,53 +115,70 @@ export default function OrgDashboard() {
     loadData(true); 
     if (!user) return;
 
-    const channel = supabase.channel('dashboard_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => loadData(false))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stats_organisateurs' }, () => loadData(false))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => loadData(false))
+    // --- ÉCOUTE TEMPS RÉEL INSTANTANÉE ---
+    const channel = supabase.channel('dashboard_org_realtime_updates')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'candidats' }, (payload) => {
+        // MISE À JOUR INSTANTANÉE DES VOTES !
+        setCandidatsScores(prev => {
+          // Si le candidat appartient à l'organisateur, on met à jour son score direct
+          if (prev[payload.new.id] !== undefined) {
+            return { ...prev, [payload.new.id]: payload.new.score || 0 };
+          }
+          return prev;
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_tickets' }, () => loadData(false))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'abonnements' }, () => loadData(false))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cagnottes' }, () => loadData(false))
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, [user]);
 
+  // Calcul du nombre de votes total basé sur la state instantanée
+  const votesTotalInstantanes = useMemo(() => {
+    return Object.values(candidatsScores).reduce((acc, score) => acc + score, 0);
+  }, [candidatsScores]);
+
+  // --- LOGIQUE DU GRAPHIQUE CHRONOLOGIQUE ---
   const chartData = useMemo(() => {
     if (!transactions.length) return [];
 
-    const now = new Date();
-    let groupedData = {};
+    const sortedTransactions = [...transactions].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const groupedData = {};
 
-    transactions.forEach(tx => {
+    sortedTransactions.forEach(tx => {
       const date = new Date(tx.created_at);
       let key = '';
 
       if (timeFilter === 'jour') {
         key = date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
       } else if (timeFilter === 'semaine') {
-        const week = Math.ceil(date.getDate() / 7);
-        key = `Semaine ${week} ${date.toLocaleDateString('fr-FR', { month: 'short' })}`;
+        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+        const pastDaysOfYear = (date - firstDayOfYear) / 86400000;
+        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+        key = `Sem ${weekNum} (${date.toLocaleDateString('fr-FR', { month: 'short' })})`;
       } else if (timeFilter === 'mois') {
-        key = date.toLocaleDateString('fr-FR', { month: 'long' });
+        key = date.toLocaleDateString('fr-FR', { month: 'long', year: '2-digit' });
       }
 
       if (!groupedData[key]) groupedData[key] = 0;
       groupedData[key] += Number(tx.montant) || 0;
     });
 
-    return Object.entries(groupedData)
-      .map(([name, total]) => ({ name, total }))
-      .slice(-7); 
+    return Object.entries(groupedData).map(([name, total]) => ({ name, total })).slice(-7); 
   }, [transactions, timeFilter]);
 
   const stats = useMemo(() => ({
     abonnes: followersCount,
     events: events.length,
-    votes: votesCount,
-    ventes: revenus.reduce((a, r) => a + (r.billets_vendus || 0), 0),
-    ca: revenus.reduce((a, r) => a + (r.total || 0), 0),
+    votes: votesTotalInstantanes, // Branchement direct sur la donnée instantanée
+    ventes: billetsVendus,
+    ca: caTotal,
     cagnottes: cagnottes.reduce((a, c) => a + (c.montant_actuel || 0), 0),
     standsDispo: stands.filter(s => s.statut === 'disponible').length,
     standsTotal: stands.length
-  }), [revenus, events, cagnottes, stands, followersCount, votesCount]);
+  }), [followersCount, events, votesTotalInstantanes, billetsVendus, caTotal, cagnottes, stands]);
 
   const theme = {
     bg: dark ? 'bg-[#050507]' : 'bg-[#f8f9ff]',
@@ -147,18 +193,14 @@ export default function OrgDashboard() {
     <div className={`min-h-screen ${theme.bg} p-4 lg:p-8 transition-colors duration-300`}>
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* HEADER PERSONNALISÉ */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-gradient-to-r from-transparent to-transparent">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
-            {/* Avatar généré avec les initiales */}
             <div className="w-16 h-16 rounded-[1.25rem] bg-gradient-to-tr from-[#6c47ff] to-[#8b5cf6] flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-[#6c47ff]/30 shrink-0">
               {getInitials(nomOrganisateur)}
             </div>
-            
             <div>
-              <h1 className={`text-3xl font-black tracking-tight ${theme.text}`}>
-                Espace de {nomOrganisateur}
-              </h1>
+              <h1 className={`text-3xl font-black tracking-tight ${theme.text}`}>Espace de {nomOrganisateur}</h1>
               <p className={`${theme.sub} mt-1 font-medium flex items-center gap-2`}>
                 {getGreeting()} <span className="animate-wave origin-bottom-right inline-block">👋</span>
               </p>
@@ -178,7 +220,7 @@ export default function OrgDashboard() {
             { label: 'Abonnés', value: stats.abonnes, icon: Users, color: 'text-[#e65c00]' },
             { label: 'Événements', value: stats.events, icon: Layout, color: 'text-blue-500' },
             { label: 'Billets', value: stats.ventes, icon: ShoppingBag, color: 'text-emerald-500' },
-            { label: 'Votes', value: stats.votes, icon: Award, color: 'text-pink-500' },
+            { label: 'Votes', value: stats.votes, icon: Award, color: 'text-pink-500' }, // Se met à jour instantanément
             { label: "CA Total", value: formatCurrency(stats.ca), icon: TrendingUp, color: 'text-violet-500' },
             { label: 'Cagnottes', value: formatCurrency(stats.cagnottes), icon: PiggyBank, color: 'text-amber-500' },
             { label: 'Stands', value: `${stats.standsTotal - stats.standsDispo}/${stats.standsTotal}`, icon: Store, color: 'text-rose-500' },
@@ -186,7 +228,9 @@ export default function OrgDashboard() {
             <div key={i} className={`p-5 rounded-3xl border ${theme.card} transition-all hover:scale-[1.02] hover:border-violet-500/30 flex flex-col justify-between`}>
               <div className={`mb-3 ${k.color}`}><k.icon size={24} strokeWidth={2.5} /></div>
               <div>
-                <p className={`text-2xl font-black ${theme.text}`}>{k.value}</p>
+                <p className={`text-2xl font-black ${theme.text}`}>
+                  {k.value}
+                </p>
                 <p className={`text-[10px] font-bold uppercase tracking-widest ${theme.sub}`}>{k.label}</p>
               </div>
             </div>
@@ -201,7 +245,6 @@ export default function OrgDashboard() {
                 <p className={`text-sm ${theme.sub}`}>Suivi de votre chiffre d'affaires global</p>
             </div>
             
-            {/* SÉLECTEUR DE PÉRIODE */}
             <div className={`flex items-center p-1 rounded-xl border ${dark ? 'bg-[#1c1c24] border-white/5' : 'bg-zinc-100 border-zinc-200'}`}>
               {[
                 { id: 'jour', label: 'Jour' },
